@@ -48,4 +48,9 @@ interface BackupLogDao {
         "UPDATE backup_logs SET status = 'CANCELLED', endTime = :now WHERE status = 'RUNNING'"
     )
     suspend fun cancelStaleRunning(now: Long)
+
+    @Query(
+        "DELETE FROM backup_logs WHERE id NOT IN (SELECT id FROM backup_logs ORDER BY startTime DESC LIMIT :keep)"
+    )
+    suspend fun deleteOldLogs(keep: Int = 100)
 }

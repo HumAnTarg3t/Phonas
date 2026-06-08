@@ -6,7 +6,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.phonas.backup.AppContainer
-import com.phonas.backup.backup.NasCredentials
 import com.phonas.backup.backup.WorkScheduler
 import com.phonas.backup.data.prefs.AppSettings
 import com.phonas.backup.data.smb.SmbClient
@@ -18,6 +17,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class SetupUiState(
     val nasHost: String = "",
@@ -28,9 +29,11 @@ data class SetupUiState(
     val requireCharging: Boolean = false,
     val monitoredFolderUris: Set<String> = emptySet(),
     val sinceDateMillis: Long? = null,
+    val maxLogEntries: Int = 100,
     val testConnectionResult: TestConnectionResult? = null,
     val isTesting: Boolean = false,
-    val isSaved: Boolean = false
+    val isSaved: Boolean = false,
+    val importExportMessage: String? = null
 )
 
 sealed class TestConnectionResult {
@@ -55,7 +58,8 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     scheduleIntervalHours = settings.scheduleIntervalHours,
                     requireCharging = settings.requireCharging,
                     monitoredFolderUris = settings.monitoredFolderUris,
-                    sinceDateMillis = settings.sinceDateMillis
+                    sinceDateMillis = settings.sinceDateMillis,
+                    maxLogEntries = settings.maxLogEntries
                 )
             }
         }
@@ -84,25 +88,112 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
         username: String,
         password: String,
         scheduleHours: Int,
-        requireCharging: Boolean
+        requireCharging: Boolean,
+        maxLogEntries: Int
     ) {
         viewModelScope.launch {
-            // If the user left the password field blank, keep the existing stored password
-            val actualPassword = if (password.isBlank()) {
-                container.credentialStore.password
-            } else {
-                password
-            }
+            val actualPassword = if (password.isBlank()) container.credentialStore.password else password
             container.credentialStore.save(host, share, username, actualPassword)
             val settings = AppSettings(
                 scheduleIntervalHours = scheduleHours,
                 requireCharging = requireCharging,
                 monitoredFolderUris = _uiState.value.monitoredFolderUris,
-                sinceDateMillis = _uiState.value.sinceDateMillis
+                sinceDateMillis = _uiState.value.sinceDateMillis,
+                maxLogEntries = maxLogEntries
             )
             container.settingsStore.save(settings)
             WorkScheduler.schedule(context, settings)
-            _uiState.update { it.copy(isSaved = true) }
+            _uiState.update { it.copy(isSaved = true, hasExistingPassword = actualPassword.isNotBlank()) }
+        }
+    }
+
+    fun exportConfig(context: Context, uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val settings = container.settingsStore.settings.first()
+                val json = JSONObject().apply {
+                    put("version", 1)
+                    put("nasHost", container.credentialStore.nasHost)
+                    put("nasShare", container.credentialStore.nasShare)
+                    put("username", container.credentialStore.username)
+                    put("password", "")
+                    put("scheduleIntervalHours", settings.scheduleIntervalHours)
+                    put("requireCharging", settings.requireCharging)
+                    put("sinceDateMillis", settings.sinceDateMillis ?: JSONObject.NULL)
+                    put("maxLogEntries", settings.maxLogEntries)
+                    val uriArr = JSONArray()
+                    settings.monitoredFolderUris.forEach { uriArr.put(it) }
+                    put("monitoredFolderUris", uriArr)
+                }
+                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
+                    it.write(json.toString(2))
+                }
+                _uiState.update { it.copy(importExportMessage = "Configuration exported") }
+            }.onFailure { e ->
+                _uiState.update { it.copy(importExportMessage = "Export failed: ${e.message}") }
+            }
+        }
+    }
+
+    fun importConfig(context: Context, uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val text = context.contentResolver.openInputStream(uri)
+                    ?.bufferedReader()?.readText() ?: error("Cannot read file")
+                val json = JSONObject(text)
+
+                val host = json.optString("nasHost", "")
+                val share = json.optString("nasShare", "")
+                val username = json.optString("username", "")
+                val password = json.optString("password", "")
+                val sinceDate = if (json.isNull("sinceDateMillis")) null
+                                else json.optLong("sinceDateMillis").takeIf { it > 0L }
+
+                val folderUris = mutableSetOf<String>()
+                val arr = json.optJSONArray("monitoredFolderUris")
+                if (arr != null) {
+                    for (i in 0 until arr.length()) {
+                        val uriStr = arr.getString(i)
+                        runCatching {
+                            context.contentResolver.takePersistableUriPermission(
+                                Uri.parse(uriStr),
+                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            )
+                        }
+                        folderUris.add(uriStr)
+                    }
+                }
+
+                val settings = AppSettings(
+                    scheduleIntervalHours = json.optInt("scheduleIntervalHours", 24),
+                    requireCharging = json.optBoolean("requireCharging", false),
+                    sinceDateMillis = sinceDate,
+                    maxLogEntries = json.optInt("maxLogEntries", 100),
+                    monitoredFolderUris = folderUris
+                )
+                container.settingsStore.save(settings)
+
+                val actualPassword = password.ifBlank { container.credentialStore.password }
+                container.credentialStore.save(host, share, username, actualPassword)
+                WorkScheduler.schedule(context, settings)
+
+                _uiState.update {
+                    it.copy(
+                        nasHost = host,
+                        nasShare = share,
+                        username = username,
+                        hasExistingPassword = actualPassword.isNotBlank(),
+                        scheduleIntervalHours = settings.scheduleIntervalHours,
+                        requireCharging = settings.requireCharging,
+                        sinceDateMillis = settings.sinceDateMillis,
+                        maxLogEntries = settings.maxLogEntries,
+                        monitoredFolderUris = folderUris,
+                        importExportMessage = "Configuration imported"
+                    )
+                }
+            }.onFailure { e ->
+                _uiState.update { it.copy(importExportMessage = "Import failed: ${e.message}") }
+            }
         }
     }
 
@@ -129,6 +220,10 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
 
     fun clearSaved() {
         _uiState.update { it.copy(isSaved = false) }
+    }
+
+    fun clearImportExportMessage() {
+        _uiState.update { it.copy(importExportMessage = null) }
     }
 
     private fun sanitize(message: String?) = message?.let {

@@ -21,7 +21,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -30,12 +29,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -55,6 +55,7 @@ import com.phonas.backup.R
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,21 +67,34 @@ fun SetupScreen(viewModel: SetupViewModel) {
     var share by remember(state.nasShare) { mutableStateOf(state.nasShare) }
     var username by remember(state.username) { mutableStateOf(state.username) }
     var password by remember { mutableStateOf("") }
-    var scheduleHours by remember(state.scheduleIntervalHours) {
-        mutableStateOf(state.scheduleIntervalHours)
-    }
+    var scheduleHours by remember(state.scheduleIntervalHours) { mutableStateOf(state.scheduleIntervalHours) }
     var requireCharging by remember(state.requireCharging) { mutableStateOf(state.requireCharging) }
+    var maxLogEntries by remember(state.maxLogEntries) { mutableStateOf(state.maxLogEntries) }
     var scheduleDropdownExpanded by remember { mutableStateOf(false) }
+    var logEntriesDropdownExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
-    ) { uri: Uri? ->
-        uri?.let { viewModel.addFolder(context, it) }
-    }
+    ) { uri: Uri? -> uri?.let { viewModel.addFolder(context, it) } }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri: Uri? -> uri?.let { viewModel.exportConfig(context, it) } }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? -> uri?.let { viewModel.importConfig(context, it) } }
 
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) viewModel.clearSaved()
+    }
+
+    LaunchedEffect(state.importExportMessage) {
+        if (state.importExportMessage != null) {
+            delay(3000)
+            viewModel.clearImportExportMessage()
+        }
     }
 
     if (showDatePicker) {
@@ -128,38 +142,29 @@ fun SetupScreen(viewModel: SetupViewModel) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        // ── NAS Settings ──────────────────────────────────────────────
         Text("NAS Settings", style = MaterialTheme.typography.titleMedium)
 
         OutlinedTextField(
-            value = host,
-            onValueChange = { host = it },
+            value = host, onValueChange = { host = it },
             label = { Text(stringResource(R.string.label_nas_host)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            modifier = Modifier.fillMaxWidth(), singleLine = true
         )
         OutlinedTextField(
-            value = share,
-            onValueChange = { share = it },
+            value = share, onValueChange = { share = it },
             label = { Text(stringResource(R.string.label_nas_share)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            modifier = Modifier.fillMaxWidth(), singleLine = true
         )
         OutlinedTextField(
-            value = username,
-            onValueChange = { username = it },
+            value = username, onValueChange = { username = it },
             label = { Text(stringResource(R.string.label_username)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
+            modifier = Modifier.fillMaxWidth(), singleLine = true
         )
         OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
+            value = password, onValueChange = { password = it },
             label = { Text(stringResource(R.string.label_password)) },
-            placeholder = {
-                if (state.hasExistingPassword) Text("Leave blank to keep current password")
-            },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
+            placeholder = { if (state.hasExistingPassword) Text("Leave blank to keep current password") },
+            modifier = Modifier.fillMaxWidth(), singleLine = true,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
         )
@@ -175,6 +180,7 @@ fun SetupScreen(viewModel: SetupViewModel) {
 
         HorizontalDivider()
 
+        // ── Folders ───────────────────────────────────────────────────
         Text(stringResource(R.string.label_monitored_folders), style = MaterialTheme.typography.titleMedium)
 
         if (state.monitoredFolderUris.isEmpty()) {
@@ -192,11 +198,7 @@ fun SetupScreen(viewModel: SetupViewModel) {
                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = displayName,
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Text(displayName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                         IconButton(onClick = { viewModel.removeFolder(uriString) }) {
                             Icon(Icons.Default.Delete, contentDescription = "Remove folder")
                         }
@@ -205,91 +207,67 @@ fun SetupScreen(viewModel: SetupViewModel) {
             }
         }
 
-        OutlinedButton(
-            onClick = { folderPickerLauncher.launch(null) },
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        OutlinedButton(onClick = { folderPickerLauncher.launch(null) }, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.btn_add_folder))
         }
 
         HorizontalDivider()
 
+        // ── Schedule ──────────────────────────────────────────────────
         Text(stringResource(R.string.label_schedule), style = MaterialTheme.typography.titleMedium)
 
-        val scheduleOptions = listOf(1 to "Every hour", 6 to "Every 6 hours",
-            12 to "Every 12 hours", 24 to "Every day")
-        val selectedLabel = scheduleOptions.firstOrNull { it.first == scheduleHours }?.second
-            ?: "Every $scheduleHours hours"
+        val scheduleOptions = listOf(1 to "Every hour", 6 to "Every 6 hours", 12 to "Every 12 hours", 24 to "Every day")
+        val scheduleLabel = scheduleOptions.firstOrNull { it.first == scheduleHours }?.second ?: "Every $scheduleHours hours"
 
-        ExposedDropdownMenuBox(
-            expanded = scheduleDropdownExpanded,
-            onExpandedChange = { scheduleDropdownExpanded = it }
-        ) {
+        ExposedDropdownMenuBox(expanded = scheduleDropdownExpanded, onExpandedChange = { scheduleDropdownExpanded = it }) {
             OutlinedTextField(
-                value = selectedLabel,
-                onValueChange = {},
-                readOnly = true,
+                value = scheduleLabel, onValueChange = {}, readOnly = true,
                 label = { Text("Interval") },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = scheduleDropdownExpanded) },
-                modifier = Modifier
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                    .fillMaxWidth()
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
             )
-            ExposedDropdownMenu(
-                expanded = scheduleDropdownExpanded,
-                onDismissRequest = { scheduleDropdownExpanded = false }
-            ) {
+            ExposedDropdownMenu(expanded = scheduleDropdownExpanded, onDismissRequest = { scheduleDropdownExpanded = false }) {
                 scheduleOptions.forEach { (hours, label) ->
-                    DropdownMenuItem(
-                        text = { Text(label) },
-                        onClick = {
-                            scheduleHours = hours
-                            scheduleDropdownExpanded = false
-                        }
-                    )
+                    DropdownMenuItem(text = { Text(label) }, onClick = { scheduleHours = hours; scheduleDropdownExpanded = false })
                 }
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(R.string.label_require_charging))
-            Switch(
-                checked = requireCharging,
-                onCheckedChange = { requireCharging = it }
+            Switch(checked = requireCharging, onCheckedChange = { requireCharging = it })
+        }
+
+        val logOptions = listOf(25, 50, 100, 200, 500)
+        val logLabel = "$maxLogEntries sessions"
+
+        ExposedDropdownMenuBox(expanded = logEntriesDropdownExpanded, onExpandedChange = { logEntriesDropdownExpanded = it }) {
+            OutlinedTextField(
+                value = logLabel, onValueChange = {}, readOnly = true,
+                label = { Text("Keep backup logs") },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = logEntriesDropdownExpanded) },
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
             )
+            ExposedDropdownMenu(expanded = logEntriesDropdownExpanded, onDismissRequest = { logEntriesDropdownExpanded = false }) {
+                logOptions.forEach { count ->
+                    DropdownMenuItem(text = { Text("$count sessions") }, onClick = { maxLogEntries = count; logEntriesDropdownExpanded = false })
+                }
+            }
         }
 
         HorizontalDivider()
 
+        // ── Date filter ───────────────────────────────────────────────
         Text("Skip Files Older Than", style = MaterialTheme.typography.titleMedium)
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
             Column(modifier = Modifier.weight(1f)) {
                 val sinceDate = state.sinceDateMillis
                 if (sinceDate != null) {
-                    Text(
-                        formatDate(sinceDate),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        "Files before this date will not be backed up",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(formatDate(sinceDate), style = MaterialTheme.typography.bodyMedium)
+                    Text("Files before this date will not be backed up", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
-                    Text(
-                        "All files (no date limit)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("All files (no date limit)", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Row {
@@ -302,11 +280,45 @@ fun SetupScreen(viewModel: SetupViewModel) {
             }
         }
 
+        HorizontalDivider()
+
+        // ── Export / Import ───────────────────────────────────────────
+        Text("Export / Import Config", style = MaterialTheme.typography.titleMedium)
+
+        Text(
+            "The exported file contains all settings and credentials. Keep it secure.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        state.importExportMessage?.let { msg ->
+            Text(
+                text = msg,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (msg.contains("failed", ignoreCase = true))
+                    MaterialTheme.colorScheme.error
+                else
+                    MaterialTheme.colorScheme.primary
+            )
+        }
+
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = { exportLauncher.launch("phonas_config.json") },
+                modifier = Modifier.weight(1f)
+            ) { Text("Export") }
+            OutlinedButton(
+                onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
+                modifier = Modifier.weight(1f)
+            ) { Text("Import") }
+        }
+
         Spacer(Modifier.height(8.dp))
 
+        // ── Save ──────────────────────────────────────────────────────
         Button(
             onClick = {
-                viewModel.save(context, host, share, username, password, scheduleHours, requireCharging)
+                viewModel.save(context, host, share, username, password, scheduleHours, requireCharging, maxLogEntries)
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = host.isNotBlank() && share.isNotBlank() && username.isNotBlank()

@@ -92,9 +92,11 @@ class BackupEngine(
 
             val endTime = System.currentTimeMillis()
             db.backupLogDao().updateCompleted(logId, endTime, filesCopied, filesSkipped, filesFailed, bytesTransferred)
+            db.backupLogDao().deleteOldLogs(settings.maxLogEntries)
             BackupResult.Success(filesCopied, filesSkipped, filesFailed, bytesTransferred)
         } catch (e: Exception) {
             db.backupLogDao().updateFailed(logId, System.currentTimeMillis(), sanitizeError(e.message))
+            db.backupLogDao().deleteOldLogs(settings.maxLogEntries)
             BackupResult.Failure(sanitizeError(e.message))
         } finally {
             smbClient.disconnect()

@@ -23,6 +23,7 @@ class SettingsStore(private val context: Context) {
         val FOLDER_URIS = stringPreferencesKey("folder_uris")
         // 0L = no filter (back up all files regardless of date)
         val SINCE_DATE = longPreferencesKey("since_date")
+        val MAX_LOG_ENTRIES = intPreferencesKey("max_log_entries")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -34,7 +35,8 @@ class SettingsStore(private val context: Context) {
                 ?.filter { it.isNotBlank() }
                 ?.toSet()
                 ?: emptySet(),
-            sinceDateMillis = prefs[Keys.SINCE_DATE]?.takeIf { it > 0L }
+            sinceDateMillis = prefs[Keys.SINCE_DATE]?.takeIf { it > 0L },
+            maxLogEntries = prefs[Keys.MAX_LOG_ENTRIES] ?: 100
         )
     }
 
@@ -44,6 +46,7 @@ class SettingsStore(private val context: Context) {
             prefs[Keys.REQUIRE_CHARGING] = settings.requireCharging
             prefs[Keys.FOLDER_URIS] = settings.monitoredFolderUris.joinToString("|")
             prefs[Keys.SINCE_DATE] = settings.sinceDateMillis ?: 0L
+            prefs[Keys.MAX_LOG_ENTRIES] = settings.maxLogEntries
         }
     }
 }
