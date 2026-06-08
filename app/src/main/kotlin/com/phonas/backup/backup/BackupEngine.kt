@@ -58,7 +58,9 @@ class BackupEngine(
             for (uriString in settings.monitoredFolderUris) {
                 val folderUri = Uri.parse(uriString)
                 val folderName = DocumentFile.fromTreeUri(context, folderUri)?.name ?: "Backup"
-                fileScanner.scan(folderUri).forEach { allFiles.add(IndexedFile(it, folderName)) }
+                fileScanner.scan(folderUri)
+                    .filter { settings.sinceDateMillis == null || it.lastModified >= settings.sinceDateMillis }
+                    .forEach { allFiles.add(IndexedFile(it, folderName)) }
             }
 
             val bytesTotal = allFiles.sumOf { it.file.size }

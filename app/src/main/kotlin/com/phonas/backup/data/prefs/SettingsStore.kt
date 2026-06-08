@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -20,6 +21,8 @@ class SettingsStore(private val context: Context) {
         val REQUIRE_CHARGING = booleanPreferencesKey("require_charging")
         // Folder URIs stored as pipe-separated string; DataStore has no native Set type
         val FOLDER_URIS = stringPreferencesKey("folder_uris")
+        // 0L = no filter (back up all files regardless of date)
+        val SINCE_DATE = longPreferencesKey("since_date")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -30,7 +33,8 @@ class SettingsStore(private val context: Context) {
                 ?.split("|")
                 ?.filter { it.isNotBlank() }
                 ?.toSet()
-                ?: emptySet()
+                ?: emptySet(),
+            sinceDateMillis = prefs[Keys.SINCE_DATE]?.takeIf { it > 0L }
         )
     }
 
@@ -39,6 +43,7 @@ class SettingsStore(private val context: Context) {
             prefs[Keys.SCHEDULE_HOURS] = settings.scheduleIntervalHours
             prefs[Keys.REQUIRE_CHARGING] = settings.requireCharging
             prefs[Keys.FOLDER_URIS] = settings.monitoredFolderUris.joinToString("|")
+            prefs[Keys.SINCE_DATE] = settings.sinceDateMillis ?: 0L
         }
     }
 }

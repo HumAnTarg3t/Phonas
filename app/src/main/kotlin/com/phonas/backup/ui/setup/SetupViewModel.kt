@@ -27,6 +27,7 @@ data class SetupUiState(
     val scheduleIntervalHours: Int = 24,
     val requireCharging: Boolean = false,
     val monitoredFolderUris: Set<String> = emptySet(),
+    val sinceDateMillis: Long? = null,
     val testConnectionResult: TestConnectionResult? = null,
     val isTesting: Boolean = false,
     val isSaved: Boolean = false
@@ -53,7 +54,8 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     hasExistingPassword = container.credentialStore.password.isNotBlank(),
                     scheduleIntervalHours = settings.scheduleIntervalHours,
                     requireCharging = settings.requireCharging,
-                    monitoredFolderUris = settings.monitoredFolderUris
+                    monitoredFolderUris = settings.monitoredFolderUris,
+                    sinceDateMillis = settings.sinceDateMillis
                 )
             }
         }
@@ -69,6 +71,10 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
 
     fun removeFolder(uri: String) {
         _uiState.update { it.copy(monitoredFolderUris = it.monitoredFolderUris - uri) }
+    }
+
+    fun setSinceDate(millis: Long?) {
+        _uiState.update { it.copy(sinceDateMillis = millis) }
     }
 
     fun save(
@@ -91,7 +97,8 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
             val settings = AppSettings(
                 scheduleIntervalHours = scheduleHours,
                 requireCharging = requireCharging,
-                monitoredFolderUris = _uiState.value.monitoredFolderUris
+                monitoredFolderUris = _uiState.value.monitoredFolderUris,
+                sinceDateMillis = _uiState.value.sinceDateMillis
             )
             container.settingsStore.save(settings)
             WorkScheduler.schedule(context, settings)

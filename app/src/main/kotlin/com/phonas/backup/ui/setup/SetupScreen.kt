@@ -19,6 +19,9 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -49,6 +52,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import com.phonas.backup.R
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,6 +71,7 @@ fun SetupScreen(viewModel: SetupViewModel) {
     }
     var requireCharging by remember(state.requireCharging) { mutableStateOf(state.requireCharging) }
     var scheduleDropdownExpanded by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -74,6 +81,26 @@ fun SetupScreen(viewModel: SetupViewModel) {
 
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) viewModel.clearSaved()
+    }
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = state.sinceDateMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.setSinceDate(datePickerState.selectedDateMillis)
+                    showDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
 
     state.testConnectionResult?.let { result ->
@@ -236,6 +263,44 @@ fun SetupScreen(viewModel: SetupViewModel) {
             )
         }
 
+        HorizontalDivider()
+
+        Text("Skip Files Older Than", style = MaterialTheme.typography.titleMedium)
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                if (state.sinceDateMillis != null) {
+                    Text(
+                        formatDate(state.sinceDateMillis),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Text(
+                        "Files before this date will not be backed up",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        "All files (no date limit)",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Row {
+                if (state.sinceDateMillis != null) {
+                    TextButton(onClick = { viewModel.setSinceDate(null) }) { Text("Clear") }
+                }
+                OutlinedButton(onClick = { showDatePicker = true }) {
+                    Text(if (state.sinceDateMillis != null) "Change" else "Set Date")
+                }
+            }
+        }
+
         Spacer(Modifier.height(8.dp))
 
         Button(
@@ -249,3 +314,6 @@ fun SetupScreen(viewModel: SetupViewModel) {
         }
     }
 }
+
+private val dateFormatter = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
+private fun formatDate(epochMillis: Long): String = dateFormatter.format(Date(epochMillis))
