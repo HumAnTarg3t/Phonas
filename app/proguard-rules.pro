@@ -1,0 +1,7 @@
+-keep class com.hierynomus.** { *; }
+-keep class org.bouncycastle.** { *; }
+-keep class com.esotericsoftware.kryo.** { *; }
+-dontwarn com.hierynomus.**
+-dontwarn org.bouncycastle.**
+-dontwarn com.esotericsoftware.**
+-dontwarn org.slf4j.**

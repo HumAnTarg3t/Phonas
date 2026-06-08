@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NAS Backup</string>
+
+    <string name="tab_status">Status</string>
+    <string name="tab_logs">Logs</string>
+    <string name="tab_setup">Setup</string>
+
+    <string name="status_idle">Idle</string>
+    <string name="status_backing_up">Backing Up</string>
+    <string name="status_waiting_wifi">Waiting for Wi-Fi</string>
+    <string name="status_waiting_nas">Waiting for NAS</string>
+    <string name="status_verifying">Verifying</string>
+    <string name="status_completed">Completed</string>
+    <string name="status_error">Error</string>
+    <string name="status_scheduled">Scheduled</string>
+
+    <string name="btn_back_up_now">Back Up Now</string>
+    <string name="btn_test_connection">Test Connection</string>
+    <string name="btn_save">Save</string>
+    <string name="btn_add_folder">Add Folder</string>
+
+    <string name="label_nas_host">NAS Hostname or IP</string>
+    <string name="label_nas_share">Shared Folder Name</string>
+    <string name="label_username">Username</string>
+    <string name="label_password">Password</string>
+    <string name="label_schedule">Backup Interval</string>
+    <string name="label_require_charging">Only back up while charging</string>
+    <string name="label_monitored_folders">Folders to Back Up</string>
+    <string name="label_no_folders">No folders selected</string>
+
+    <string name="notification_channel_name">Backup Progress</string>
+    <string name="notification_title">NAS Backup</string>
+    <string name="notification_backing_up">Backup in progress…</string>
+
+    <string name="error_not_configured">Configure NAS settings before starting a backup.</string>
+    <string name="connection_success">Connected successfully.</string>
+    <string name="logs_empty">No backups have run yet.</string>
+
+    <string name="files_copied">%1$d copied</string>
+    <string name="files_skipped">%1$d skipped</string>
+    <string name="files_failed">%1$d failed</string>
+</resources>
