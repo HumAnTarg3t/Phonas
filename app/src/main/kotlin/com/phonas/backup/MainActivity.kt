@@ -8,7 +8,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.WindowCompat
 import com.phonas.backup.ui.AppNavGraph
-import com.phonas.backup.ui.theme.NasBackupTheme
+import com.phonas.backup.ui.theme.PhonasTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -27,7 +27,7 @@ class MainActivity : ComponentActivity() {
         val container = (application as BackupApplication).container
 
         setContent {
-            NasBackupTheme {
+            PhonasTheme {
                 AppNavGraph(container = container)
             }
         }

@@ -1,4 +1,4 @@
-# NAS Backup
+# Phonas
 
 An Android app that automatically backs up photos and videos from your phone to a NAS over SMB on your local network. No cloud. No internet required. Runs silently in the background on a configurable schedule.
 

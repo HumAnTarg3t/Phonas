@@ -1,4 +1,4 @@
-# Sideloading NAS Backup
+# Sideloading Phonas
 
 This guide covers installing the app on an Android phone without using the Play Store or USB debugging. This is the method to use for company-managed phones where USB debugging is locked by IT policy.
 
@@ -57,13 +57,13 @@ Open the APK file on the phone:
 - If you transferred via USB: open the **Files** or **My Files** app, navigate to `Downloads`, and tap `app-debug.apk`.
 - If you opened it from email or cloud storage: tap **Download** then **Open**.
 
-The Android installer appears. Tap **Install**. The app will appear in your launcher as **NAS Backup**.
+The Android installer appears. Tap **Install**. The app will appear in your launcher as **Phonas**.
 
 ---
 
 ## Step 5 — First launch
 
-1. Open **NAS Backup**.
+1. Open **Phonas**.
 2. Go to the **Setup** tab.
 3. Enter your NAS hostname, share name, username, and password.
 4. Tap **Test Connection** to confirm reachability.

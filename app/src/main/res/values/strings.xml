@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">NAS Backup</string>
+    <string name="app_name">Phonas</string>
 
     <string name="tab_status">Status</string>
     <string name="tab_logs">Logs</string>
@@ -30,7 +30,7 @@
     <string name="label_no_folders">No folders selected</string>
 
     <string name="notification_channel_name">Backup Progress</string>
-    <string name="notification_title">NAS Backup</string>
+    <string name="notification_title">Phonas</string>
     <string name="notification_backing_up">Backup in progress…</string>
 
     <string name="error_not_configured">Configure NAS settings before starting a backup.</string>

@@ -183,25 +183,32 @@ fun SetupScreen(viewModel: SetupViewModel) {
         // ── Folders ───────────────────────────────────────────────────
         Text(stringResource(R.string.label_monitored_folders), style = MaterialTheme.typography.titleMedium)
 
-        if (state.monitoredFolderUris.isEmpty()) {
+        if (state.monitoredFolders.isEmpty()) {
             Text(
                 stringResource(R.string.label_no_folders),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            state.monitoredFolderUris.forEach { uriString ->
-                val uri = Uri.parse(uriString)
-                val displayName = DocumentFile.fromTreeUri(context, uri)?.name ?: uriString
+            state.monitoredFolders.forEach { entry ->
+                val uri = Uri.parse(entry.uri)
+                val displayName = DocumentFile.fromTreeUri(context, uri)?.name ?: entry.uri
                 Card(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(displayName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                        IconButton(onClick = { viewModel.removeFolder(uriString) }) {
-                            Icon(Icons.Default.Delete, contentDescription = "Remove folder")
+                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(displayName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                            IconButton(onClick = { viewModel.removeFolder(entry.uri) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Remove folder")
+                            }
                         }
+                        OutlinedTextField(
+                            value = entry.prefix,
+                            onValueChange = { viewModel.updateFolderPrefix(entry.uri, it) },
+                            label = { Text("NAS prefix (optional)") },
+                            placeholder = { Text("e.g. camera") },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            singleLine = true
+                        )
                     }
                 }
             }

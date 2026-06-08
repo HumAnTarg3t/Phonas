@@ -20,5 +20,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "NasBackup"
+rootProject.name = "Phonas"
 include(":app")

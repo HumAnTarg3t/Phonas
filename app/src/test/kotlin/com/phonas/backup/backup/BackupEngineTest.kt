@@ -34,7 +34,7 @@ class BackupEngineTest {
     private lateinit var engine: BackupEngine
 
     private val credentials = NasCredentials("nas", "share", "user", "pass")
-    private val settings = AppSettings(monitoredFolderUris = setOf("content://test/folder"))
+    private val settings = AppSettings(monitoredFolders = listOf(com.phonas.backup.data.prefs.FolderEntry("content://test/folder")))
 
     @Before
     fun setup() {
@@ -83,7 +83,7 @@ class BackupEngineTest {
 
     @Test
     fun `empty folder set returns Success with zero files`() = runTest {
-        val emptySettings = AppSettings(monitoredFolderUris = emptySet())
+        val emptySettings = AppSettings(monitoredFolders = emptyList())
 
         val result = engine.runBackup(emptySettings, credentials)
 

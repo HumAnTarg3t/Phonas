@@ -206,7 +206,7 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                         requireCharging = settings.requireCharging,
                         sinceDateMillis = settings.sinceDateMillis,
                         maxLogEntries = settings.maxLogEntries,
-                        monitoredFolderUris = folderUris,
+                        monitoredFolders = folderEntries,
                         importExportMessage = "Configuration imported"
                     )
                 }
