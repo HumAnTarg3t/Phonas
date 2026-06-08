@@ -2,7 +2,6 @@ package com.phonas.backup.backup
 
 import android.content.Context
 import android.net.Uri
-import androidx.documentfile.provider.DocumentFile
 import com.phonas.backup.backup.model.BackupProgress
 import com.phonas.backup.backup.model.BackupResult
 import com.phonas.backup.backup.model.MediaFile
@@ -12,6 +11,7 @@ import com.phonas.backup.data.db.entity.BackupLogEntry
 import com.phonas.backup.data.db.entity.BackupStatus
 import com.phonas.backup.data.db.entity.LogStatus
 import com.phonas.backup.data.prefs.AppSettings
+import com.phonas.backup.data.prefs.FolderEntry
 import com.phonas.backup.data.smb.SmbClient
 import java.security.DigestInputStream
 import java.security.MessageDigest
@@ -52,20 +52,19 @@ class BackupEngine(
             )
 
             // Collect all files across all monitored folders
-            data class IndexedFile(val file: MediaFile, val folderDisplayName: String)
+            data class IndexedFile(val file: MediaFile, val prefix: String)
 
             val allFiles = mutableListOf<IndexedFile>()
-            for (uriString in settings.monitoredFolderUris) {
-                val folderUri = Uri.parse(uriString)
-                val folderName = DocumentFile.fromTreeUri(context, folderUri)?.name ?: "Backup"
+            for (entry in settings.monitoredFolders) {
+                val folderUri = Uri.parse(entry.uri)
                 fileScanner.scan(folderUri)
                     .filter { settings.sinceDateMillis == null || it.lastModified >= settings.sinceDateMillis }
-                    .forEach { allFiles.add(IndexedFile(it, folderName)) }
+                    .forEach { allFiles.add(IndexedFile(it, entry.prefix)) }
             }
 
             val bytesTotal = allFiles.sumOf { it.file.size }
 
-            allFiles.forEachIndexed { index, (file, folderName) ->
+            allFiles.forEachIndexed { index, (file, prefix) ->
                 progressCallback?.invoke(
                     BackupProgress(
                         currentFile = file.name,
@@ -76,7 +75,7 @@ class BackupEngine(
                     )
                 )
 
-                val remotePath = buildRemotePath(folderName, file)
+                val remotePath = buildRemotePath(prefix, file)
                 if (duplicateDetector.shouldSkip(file, smbClient, remotePath)) {
                     filesSkipped++
                 } else {
@@ -179,8 +178,9 @@ class BackupEngine(
         return Pair(false, 0L)
     }
 
-    private fun buildRemotePath(folderDisplayName: String, file: MediaFile): String {
-        val parts = mutableListOf(folderDisplayName)
+    private fun buildRemotePath(prefix: String, file: MediaFile): String {
+        val parts = mutableListOf<String>()
+        if (prefix.isNotBlank()) parts.add(prefix.trim())
         if (file.relativePath.isNotEmpty()) {
             parts.addAll(file.relativePath.split("/").filter { it.isNotEmpty() })
         }

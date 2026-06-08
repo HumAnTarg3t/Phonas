@@ -1,9 +1,11 @@
 package com.phonas.backup.data.prefs
 
+data class FolderEntry(val uri: String, val prefix: String = "")
+
 data class AppSettings(
     val scheduleIntervalHours: Int = 24,
     val requireCharging: Boolean = false,
-    val monitoredFolderUris: Set<String> = emptySet(),
+    val monitoredFolders: List<FolderEntry> = emptyList(),
     val sinceDateMillis: Long? = null,
     val maxLogEntries: Int = 100
 )

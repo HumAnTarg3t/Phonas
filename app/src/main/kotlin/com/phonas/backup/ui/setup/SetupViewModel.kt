@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.phonas.backup.AppContainer
 import com.phonas.backup.backup.WorkScheduler
 import com.phonas.backup.data.prefs.AppSettings
+import com.phonas.backup.data.prefs.FolderEntry
 import com.phonas.backup.data.smb.SmbClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,7 +28,7 @@ data class SetupUiState(
     val hasExistingPassword: Boolean = false,
     val scheduleIntervalHours: Int = 24,
     val requireCharging: Boolean = false,
-    val monitoredFolderUris: Set<String> = emptySet(),
+    val monitoredFolders: List<FolderEntry> = emptyList(),
     val sinceDateMillis: Long? = null,
     val maxLogEntries: Int = 100,
     val testConnectionResult: TestConnectionResult? = null,
@@ -57,7 +58,7 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     hasExistingPassword = container.credentialStore.password.isNotBlank(),
                     scheduleIntervalHours = settings.scheduleIntervalHours,
                     requireCharging = settings.requireCharging,
-                    monitoredFolderUris = settings.monitoredFolderUris,
+                    monitoredFolders = settings.monitoredFolders,
                     sinceDateMillis = settings.sinceDateMillis,
                     maxLogEntries = settings.maxLogEntries
                 )
@@ -70,11 +71,19 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
             uri,
             android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
         )
-        _uiState.update { it.copy(monitoredFolderUris = it.monitoredFolderUris + uri.toString()) }
+        _uiState.update { it.copy(monitoredFolders = it.monitoredFolders + FolderEntry(uri.toString())) }
     }
 
     fun removeFolder(uri: String) {
-        _uiState.update { it.copy(monitoredFolderUris = it.monitoredFolderUris - uri) }
+        _uiState.update { it.copy(monitoredFolders = it.monitoredFolders.filter { f -> f.uri != uri }) }
+    }
+
+    fun updateFolderPrefix(uri: String, prefix: String) {
+        _uiState.update {
+            it.copy(monitoredFolders = it.monitoredFolders.map { f ->
+                if (f.uri == uri) f.copy(prefix = prefix) else f
+            })
+        }
     }
 
     fun setSinceDate(millis: Long?) {
@@ -97,7 +106,7 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
             val settings = AppSettings(
                 scheduleIntervalHours = scheduleHours,
                 requireCharging = requireCharging,
-                monitoredFolderUris = _uiState.value.monitoredFolderUris,
+                monitoredFolders = _uiState.value.monitoredFolders,
                 sinceDateMillis = _uiState.value.sinceDateMillis,
                 maxLogEntries = maxLogEntries
             )
@@ -121,9 +130,11 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     put("requireCharging", settings.requireCharging)
                     put("sinceDateMillis", settings.sinceDateMillis ?: JSONObject.NULL)
                     put("maxLogEntries", settings.maxLogEntries)
-                    val uriArr = JSONArray()
-                    settings.monitoredFolderUris.forEach { uriArr.put(it) }
-                    put("monitoredFolderUris", uriArr)
+                    val foldersArr = JSONArray()
+                    settings.monitoredFolders.forEach { f ->
+                        foldersArr.put(JSONObject().apply { put("uri", f.uri); put("prefix", f.prefix) })
+                    }
+                    put("monitoredFolders", foldersArr)
                 }
                 context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
                     it.write(json.toString(2))
@@ -149,18 +160,26 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                 val sinceDate = if (json.isNull("sinceDateMillis")) null
                                 else json.optLong("sinceDateMillis").takeIf { it > 0L }
 
-                val folderUris = mutableSetOf<String>()
-                val arr = json.optJSONArray("monitoredFolderUris")
-                if (arr != null) {
-                    for (i in 0 until arr.length()) {
-                        val uriStr = arr.getString(i)
+                val folderEntries = mutableListOf<FolderEntry>()
+                // Support both new format (monitoredFolders) and legacy (monitoredFolderUris)
+                val foldersArr = json.optJSONArray("monitoredFolders")
+                val legacyArr = json.optJSONArray("monitoredFolderUris")
+                val sourceArr = foldersArr ?: legacyArr
+                if (sourceArr != null) {
+                    for (i in 0 until sourceArr.length()) {
+                        val (uriStr, prefix) = if (foldersArr != null) {
+                            val obj = sourceArr.getJSONObject(i)
+                            obj.getString("uri") to obj.optString("prefix", "")
+                        } else {
+                            sourceArr.getString(i) to ""
+                        }
                         runCatching {
                             context.contentResolver.takePersistableUriPermission(
                                 Uri.parse(uriStr),
                                 android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
                             )
                         }
-                        folderUris.add(uriStr)
+                        folderEntries.add(FolderEntry(uri = uriStr, prefix = prefix))
                     }
                 }
 
@@ -169,7 +188,7 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     requireCharging = json.optBoolean("requireCharging", false),
                     sinceDateMillis = sinceDate,
                     maxLogEntries = json.optInt("maxLogEntries", 100),
-                    monitoredFolderUris = folderUris
+                    monitoredFolders = folderEntries
                 )
                 container.settingsStore.save(settings)
 
