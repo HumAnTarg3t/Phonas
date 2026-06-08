@@ -65,6 +65,7 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.security.crypto)
     implementation(libs.smbj)
+    implementation(libs.bouncycastle)
     implementation(libs.coroutines.android)
 
     testImplementation(libs.junit)

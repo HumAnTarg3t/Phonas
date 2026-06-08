@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -68,7 +69,7 @@ class StatusViewModel(
 
     fun startBackupNow(context: Context) {
         viewModelScope.launch {
-            val settings = kotlinx.coroutines.flow.first(container.settingsStore.settings)
+            val settings = container.settingsStore.settings.first()
             WorkScheduler.runNow(context, settings)
         }
     }

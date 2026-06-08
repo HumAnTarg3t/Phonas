@@ -273,9 +273,10 @@ fun SetupScreen(viewModel: SetupViewModel) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                if (state.sinceDateMillis != null) {
+                val sinceDate = state.sinceDateMillis
+                if (sinceDate != null) {
                     Text(
-                        formatDate(state.sinceDateMillis),
+                        formatDate(sinceDate),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
