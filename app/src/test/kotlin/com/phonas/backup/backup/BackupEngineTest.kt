@@ -11,6 +11,7 @@ import com.phonas.backup.data.db.entity.BackupLogEntry
 import com.phonas.backup.data.db.entity.LogStatus
 import com.phonas.backup.data.prefs.AppSettings
 import com.phonas.backup.data.smb.SmbClient
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -48,7 +49,7 @@ class BackupEngineTest {
 
         whenever(db.backupFileDao()).thenReturn(fileDao)
         whenever(db.backupLogDao()).thenReturn(logDao)
-        whenever(logDao.insert(any())).thenReturn(1L)
+        runBlocking { whenever(logDao.insert(any())).thenReturn(1L) }
 
         engine = BackupEngine(context, db, smbClient, fileScanner, duplicateDetector, fileVerifier)
     }
