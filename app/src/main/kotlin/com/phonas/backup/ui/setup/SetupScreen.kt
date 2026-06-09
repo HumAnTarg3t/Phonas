@@ -296,8 +296,10 @@ fun SetupScreen(viewModel: SetupViewModel) {
         }
 
         state.nextBackupMillis?.let { next ->
+            val now = System.currentTimeMillis()
             Text(
-                "Next scheduled backup: ${formatNextBackup(next)}",
+                if (next <= now) "Backup overdue — will run when on Wi-Fi"
+                else "Next scheduled backup: ${formatNextBackup(next)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

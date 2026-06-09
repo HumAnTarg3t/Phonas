@@ -18,6 +18,9 @@ interface BackupLogDao {
     @Query("SELECT * FROM backup_logs ORDER BY startTime DESC LIMIT 1")
     suspend fun getLatestLog(): BackupLogEntry?
 
+    @Query("SELECT * FROM backup_logs WHERE status = 'COMPLETED' ORDER BY startTime DESC LIMIT 1")
+    fun getLastCompletedLogFlow(): Flow<BackupLogEntry?>
+
     @Query(
         """
         UPDATE backup_logs

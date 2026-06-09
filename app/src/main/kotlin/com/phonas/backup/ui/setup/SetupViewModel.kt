@@ -5,7 +5,6 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import androidx.work.WorkManager
 import com.phonas.backup.AppContainer
 import com.phonas.backup.backup.WorkScheduler
 import com.phonas.backup.data.prefs.AppSettings
@@ -70,11 +69,12 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
             }
         }
         viewModelScope.launch {
-            WorkManager.getInstance(container.appContext)
-                .getWorkInfosForUniqueWorkFlow(WorkScheduler.WORK_NAME_PERIODIC)
-                .collect { infos ->
-                    val now = System.currentTimeMillis()
-                    val next = infos.firstOrNull()?.nextScheduleTimeMillis?.takeIf { it > now }
+            container.db.backupLogDao().getLastCompletedLogFlow()
+                .collect { lastCompleted ->
+                    val settings = container.settingsStore.settings.first()
+                    val intervalMs = settings.scheduleIntervalHours * 3_600_000L
+                    val base = lastCompleted?.endTime ?: lastCompleted?.startTime
+                    val next = if (base != null) base + intervalMs else null
                     _uiState.update { it.copy(nextBackupMillis = next) }
                 }
         }
