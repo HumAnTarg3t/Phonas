@@ -29,7 +29,8 @@ data class StatusUiState(
     val status: BackupStatusDisplay = BackupStatusDisplay.IDLE,
     val progress: BackupProgress? = null,
     val latestLog: BackupLogEntry? = null,
-    val isConfigured: Boolean = false
+    val isConfigured: Boolean = false,
+    val nextBackupMillis: Long? = null
 )
 
 class StatusViewModel(
@@ -56,14 +57,28 @@ class StatusViewModel(
         val immediateFlow = workManager.getWorkInfosForUniqueWorkFlow(WorkScheduler.WORK_NAME_IMMEDIATE)
 
         combine(periodicFlow, immediateFlow) { periodic, immediate ->
-            // Immediate work takes precedence when active
-            val active = immediate.firstOrNull()?.takeIf {
-                it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED
-            } ?: periodic.firstOrNull()
-            active
-        }.onEach { workInfo ->
-            val (status, progress) = resolveStatus(workInfo)
+            val immediateInfo = immediate.firstOrNull()
+            val periodicInfo = periodic.firstOrNull()
+            // Immediate work takes precedence; only it can show WAITING_WIFI
+            if (immediateInfo != null && (immediateInfo.state == WorkInfo.State.RUNNING
+                    || immediateInfo.state == WorkInfo.State.ENQUEUED
+                    || immediateInfo.state == WorkInfo.State.BLOCKED)) {
+                resolveStatus(immediateInfo, isImmediate = true)
+            } else {
+                resolveStatus(periodicInfo, isImmediate = false)
+            }
+        }.onEach { (status, progress) ->
             _uiState.update { it.copy(status = status, progress = progress) }
+        }.launchIn(viewModelScope)
+
+        combine(
+            container.db.backupLogDao().getLastCompletedLogFlow(),
+            container.settingsStore.settings
+        ) { lastCompleted, settings ->
+            val base = lastCompleted?.endTime ?: lastCompleted?.startTime
+            if (base != null) base + settings.scheduleIntervalMinutes * 60_000L else null
+        }.onEach { nextMillis ->
+            _uiState.update { it.copy(nextBackupMillis = nextMillis) }
         }.launchIn(viewModelScope)
     }
 
@@ -82,7 +97,7 @@ class StatusViewModel(
         _uiState.update { it.copy(isConfigured = container.credentialStore.isConfigured()) }
     }
 
-    private fun resolveStatus(workInfo: WorkInfo?): Pair<BackupStatusDisplay, BackupProgress?> {
+    private fun resolveStatus(workInfo: WorkInfo?, isImmediate: Boolean): Pair<BackupStatusDisplay, BackupProgress?> {
         if (workInfo == null) return Pair(BackupStatusDisplay.IDLE, null)
 
         return when (workInfo.state) {
@@ -98,7 +113,8 @@ class StatusViewModel(
                 Pair(BackupStatusDisplay.BACKING_UP, progress)
             }
             WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED ->
-                Pair(BackupStatusDisplay.WAITING_WIFI, null)
+                if (isImmediate) Pair(BackupStatusDisplay.WAITING_WIFI, null)
+                else Pair(BackupStatusDisplay.IDLE, null)
             WorkInfo.State.SUCCEEDED ->
                 Pair(BackupStatusDisplay.COMPLETED, null)
             WorkInfo.State.FAILED ->

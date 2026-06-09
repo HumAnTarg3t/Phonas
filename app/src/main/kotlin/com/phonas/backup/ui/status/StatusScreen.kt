@@ -22,6 +22,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -44,8 +47,13 @@ fun StatusScreen(
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
+    val nowMs = remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         viewModel.refreshConfigured()
+        while (true) {
+            delay(30_000L)
+            nowMs.longValue = System.currentTimeMillis()
+        }
     }
 
     Column(
@@ -73,6 +81,21 @@ fun StatusScreen(
 
         state.latestLog?.let { log ->
             LastBackupCard(log = log)
+        }
+
+        state.nextBackupMillis?.let { next ->
+            val remaining = next - nowMs.longValue
+            val label = when {
+                remaining <= 0 -> "Next backup: soon"
+                remaining < 60_000L -> "Next backup: in less than a minute"
+                remaining < 3_600_000L -> "Next backup: in ${remaining / 60_000L} min"
+                else -> "Next backup: ${formatNextBackup(next)}"
+            }
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
         Spacer(Modifier.weight(1f))
@@ -192,6 +215,23 @@ private fun LastBackupCard(log: BackupLogEntry) {
                 )
             }
         }
+    }
+}
+
+private fun formatNextBackup(epochMillis: Long): String {
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val cal = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 0)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }
+    val tomorrowStart = cal.timeInMillis + 86_400_000L
+    val dayAfterStart = tomorrowStart + 86_400_000L
+    return when {
+        epochMillis < tomorrowStart -> "today at ${timeFormat.format(Date(epochMillis))}"
+        epochMillis < dayAfterStart -> "tomorrow at ${timeFormat.format(Date(epochMillis))}"
+        else -> SimpleDateFormat("EEE d MMM 'at' HH:mm", Locale.getDefault()).format(Date(epochMillis))
     }
 }
 

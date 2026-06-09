@@ -71,7 +71,7 @@ The Android installer appears. Tap **Install**. The app will appear in your laun
    - **Scan all device media** (recommended) — turn on the toggle to back up all photos and videos on the device automatically. The app will prompt for storage permission; tap **Allow**.
    - **Manual folders** — tap **Add Folder** and select the folders to back up (e.g. DCIM/Camera).
 6. Optionally set a **Skip Files Older Than** date to avoid re-copying your entire history. Use the date picker — a future date will result in nothing being backed up.
-7. Set your preferred backup interval and tap **Save**. A brief confirmation message confirms the save succeeded.
+7. Set your preferred backup interval (15 min / 1h / 6h / 12h / 24h) and tap **Save**. A brief confirmation message confirms the save. The timer starts from the moment you press Save.
 
 If you have a previously exported config file, tap **Import** in the Setup screen to restore all settings (you will need to re-enter your password and re-add folders).
 

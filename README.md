@@ -20,6 +20,8 @@ An Android app that automatically backs up photos and videos from your phone to 
 - Export and import the full configuration as a JSON file
 - Credentials stored with Android Keystore encryption (password excluded from exports)
 - Database reset button for testing
+- Abort button on the Status screen to stop a running backup immediately
+- Next scheduled backup time shown on both the Status and Setup screens
 - Simple three-screen UI: Status, Logs, Setup
 
 ---
@@ -110,12 +112,12 @@ No Hilt. `AppContainer` holds singleton instances and is created in `BackupAppli
 4. Choose how to select files:
    - **Scan all device media** — turn this on to back up everything on the device (photos, videos, WhatsApp, Screenshots, etc.) without selecting individual folders. The app will request storage permission on first enable.
    - **Manual folders** — tap **Add Folder** to select specific folders. An optional NAS prefix can be set per folder to organise files under a custom subdirectory on the NAS.
-5. Choose a **backup interval** (1h / 6h / 12h / 24h) and optional charging-only requirement.
+5. Choose a **backup interval** (15 min / 1h / 6h / 12h / 24h) and optional charging-only requirement. The 15-minute option is the minimum enforced by Android's job scheduler and is intended for testing. Pressing Save always resets the timer from that moment.
 6. Optionally set **Keep backup logs** (how many backup sessions to retain in history).
 7. Optionally set **Skip Files Older Than** to ignore files before a specific date.
 8. Tap **Save**. A confirmation message appears briefly. The first scheduled backup runs automatically when on Wi-Fi.
 
-Tap **Back Up Now** on the Status screen to trigger an immediate backup.
+Tap **Back Up Now** on the Status screen to trigger an immediate backup. While a backup is running, a **Stop Backup** button appears to cancel it immediately. The Status screen also shows when the next scheduled backup is due.
 
 ---
 
@@ -202,16 +204,6 @@ The original file modification date is preserved on the NAS copy via SMB `FileBa
 ## SMBJ and BouncyCastle
 
 Android ships an incomplete BouncyCastle provider. `BackupApplication.onCreate()` removes it and registers the full BC provider before any backup runs. This is required for SMB signing and encryption in SMBJ.
-
----
-
-## NAS Recycle Bin
-
-If files appear in a `#Recycle` folder on the NAS instead of being deleted cleanly, the NAS recycle bin feature is enabled on the backup share. This is a NAS setting, not an app behaviour. Disable it in your NAS admin panel:
-
-- **Synology**: Shared Folder → Edit → uncheck "Enable Recycle Bin"
-- **QNAP**: Shared Folders → Edit → uncheck "Enable Recycle Bin"
-- **TrueNAS**: Dataset properties → disable recycle bin / shadow copies
 
 ---
 
