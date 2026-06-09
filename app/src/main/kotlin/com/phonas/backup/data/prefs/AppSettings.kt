@@ -7,5 +7,6 @@ data class AppSettings(
     val requireCharging: Boolean = false,
     val monitoredFolders: List<FolderEntry> = emptyList(),
     val sinceDateMillis: Long? = null,
-    val maxLogEntries: Int = 100
+    val maxLogEntries: Int = 100,
+    val scanAllMedia: Boolean = false
 )

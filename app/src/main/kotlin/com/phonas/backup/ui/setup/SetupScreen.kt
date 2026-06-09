@@ -186,39 +186,57 @@ fun SetupScreen(viewModel: SetupViewModel) {
         // ── Folders ───────────────────────────────────────────────────
         Text(stringResource(R.string.label_monitored_folders), style = MaterialTheme.typography.titleMedium)
 
-        if (state.monitoredFolders.isEmpty()) {
-            Text(
-                stringResource(R.string.label_no_folders),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        } else {
-            state.monitoredFolders.forEach { entry ->
-                val uri = Uri.parse(entry.uri)
-                val displayName = DocumentFile.fromTreeUri(context, uri)?.name ?: entry.uri
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(displayName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
-                            IconButton(onClick = { viewModel.removeFolder(entry.uri) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Remove folder")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Scan all device media", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Backs up all photos and videos on the device, including WhatsApp, Screenshots, Downloads etc. Folder selection below is ignored.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(checked = state.scanAllMedia, onCheckedChange = { viewModel.setScanAllMedia(it) })
+        }
+
+        if (!state.scanAllMedia) {
+            if (state.monitoredFolders.isEmpty()) {
+                Text(
+                    stringResource(R.string.label_no_folders),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                state.monitoredFolders.forEach { entry ->
+                    val uri = Uri.parse(entry.uri)
+                    val displayName = DocumentFile.fromTreeUri(context, uri)?.name ?: entry.uri
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(displayName, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                                IconButton(onClick = { viewModel.removeFolder(entry.uri) }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Remove folder")
+                                }
                             }
+                            OutlinedTextField(
+                                value = entry.prefix,
+                                onValueChange = { viewModel.updateFolderPrefix(entry.uri, it) },
+                                label = { Text("NAS prefix (optional)") },
+                                placeholder = { Text("e.g. camera") },
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                                singleLine = true
+                            )
                         }
-                        OutlinedTextField(
-                            value = entry.prefix,
-                            onValueChange = { viewModel.updateFolderPrefix(entry.uri, it) },
-                            label = { Text("NAS prefix (optional)") },
-                            placeholder = { Text("e.g. camera") },
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                            singleLine = true
-                        )
                     }
                 }
             }
-        }
 
-        OutlinedButton(onClick = { folderPickerLauncher.launch(null) }, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.btn_add_folder))
+            OutlinedButton(onClick = { folderPickerLauncher.launch(null) }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.btn_add_folder))
+            }
         }
 
         HorizontalDivider()

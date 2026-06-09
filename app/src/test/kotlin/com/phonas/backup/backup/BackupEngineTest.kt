@@ -31,6 +31,7 @@ class BackupEngineTest {
     private lateinit var sessionFileDao: BackupSessionFileDao
     private lateinit var smbClient: SmbClient
     private lateinit var fileScanner: FileScanner
+    private lateinit var mediaStoreScanner: MediaStoreScanner
     private lateinit var duplicateDetector: DuplicateDetector
     private lateinit var fileVerifier: FileVerifier
     private lateinit var engine: BackupEngine
@@ -47,6 +48,7 @@ class BackupEngineTest {
         sessionFileDao = mock()
         smbClient = mock()
         fileScanner = mock()
+        mediaStoreScanner = mock()
         duplicateDetector = mock()
         fileVerifier = mock()
 
@@ -55,7 +57,7 @@ class BackupEngineTest {
         whenever(db.backupSessionFileDao()).thenReturn(sessionFileDao)
         runBlocking { whenever(logDao.insert(any())).thenReturn(1L) }
 
-        engine = BackupEngine(context, db, smbClient, fileScanner, duplicateDetector, fileVerifier)
+        engine = BackupEngine(context, db, smbClient, fileScanner, mediaStoreScanner, duplicateDetector, fileVerifier)
     }
 
     @Test

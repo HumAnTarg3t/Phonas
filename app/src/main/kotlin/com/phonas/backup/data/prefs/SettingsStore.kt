@@ -25,6 +25,7 @@ class SettingsStore(private val context: Context) {
         val FOLDERS_JSON = stringPreferencesKey("folders_json")     // current format
         val SINCE_DATE = longPreferencesKey("since_date")
         val MAX_LOG_ENTRIES = intPreferencesKey("max_log_entries")
+        val SCAN_ALL_MEDIA = booleanPreferencesKey("scan_all_media")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -39,7 +40,8 @@ class SettingsStore(private val context: Context) {
                 else -> emptyList()
             },
             sinceDateMillis = prefs[Keys.SINCE_DATE]?.takeIf { it > 0L },
-            maxLogEntries = prefs[Keys.MAX_LOG_ENTRIES] ?: 100
+            maxLogEntries = prefs[Keys.MAX_LOG_ENTRIES] ?: 100,
+            scanAllMedia = prefs[Keys.SCAN_ALL_MEDIA] ?: false
         )
     }
 
@@ -50,6 +52,7 @@ class SettingsStore(private val context: Context) {
             prefs[Keys.FOLDERS_JSON] = serializeFolders(settings.monitoredFolders)
             prefs[Keys.SINCE_DATE] = settings.sinceDateMillis ?: 0L
             prefs[Keys.MAX_LOG_ENTRIES] = settings.maxLogEntries
+            prefs[Keys.SCAN_ALL_MEDIA] = settings.scanAllMedia
         }
     }
 

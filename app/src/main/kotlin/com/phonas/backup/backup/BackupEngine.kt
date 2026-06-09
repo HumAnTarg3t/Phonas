@@ -14,6 +14,7 @@ import com.phonas.backup.data.db.entity.LogStatus
 import com.phonas.backup.data.db.entity.SessionFileStatus
 import com.phonas.backup.data.prefs.AppSettings
 import com.phonas.backup.data.smb.SmbClient
+
 import java.security.DigestInputStream
 import java.security.MessageDigest
 
@@ -29,6 +30,7 @@ class BackupEngine(
     private val db: AppDatabase,
     private val smbClient: SmbClient,
     private val fileScanner: FileScanner,
+    private val mediaStoreScanner: MediaStoreScanner,
     private val duplicateDetector: DuplicateDetector,
     private val fileVerifier: FileVerifier
 ) {
@@ -55,11 +57,17 @@ class BackupEngine(
             data class IndexedFile(val file: MediaFile, val prefix: String)
 
             val allFiles = mutableListOf<IndexedFile>()
-            for (entry in settings.monitoredFolders) {
-                val folderUri = Uri.parse(entry.uri)
-                fileScanner.scan(folderUri)
+            if (settings.scanAllMedia) {
+                mediaStoreScanner.scanAll()
                     .filter { settings.sinceDateMillis == null || it.lastModified >= settings.sinceDateMillis }
-                    .forEach { allFiles.add(IndexedFile(it, entry.prefix)) }
+                    .forEach { allFiles.add(IndexedFile(it, "")) }
+            } else {
+                for (entry in settings.monitoredFolders) {
+                    val folderUri = Uri.parse(entry.uri)
+                    fileScanner.scan(folderUri)
+                        .filter { settings.sinceDateMillis == null || it.lastModified >= settings.sinceDateMillis }
+                        .forEach { allFiles.add(IndexedFile(it, entry.prefix)) }
+                }
             }
 
             val bytesTotal = allFiles.sumOf { it.file.size }

@@ -31,6 +31,7 @@ data class SetupUiState(
     val monitoredFolders: List<FolderEntry> = emptyList(),
     val sinceDateMillis: Long? = null,
     val maxLogEntries: Int = 100,
+    val scanAllMedia: Boolean = false,
     val testConnectionResult: TestConnectionResult? = null,
     val isTesting: Boolean = false,
     val isSaved: Boolean = false,
@@ -60,7 +61,8 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     requireCharging = settings.requireCharging,
                     monitoredFolders = settings.monitoredFolders,
                     sinceDateMillis = settings.sinceDateMillis,
-                    maxLogEntries = settings.maxLogEntries
+                    maxLogEntries = settings.maxLogEntries,
+                    scanAllMedia = settings.scanAllMedia
                 )
             }
         }
@@ -90,6 +92,10 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
         _uiState.update { it.copy(sinceDateMillis = millis) }
     }
 
+    fun setScanAllMedia(enabled: Boolean) {
+        _uiState.update { it.copy(scanAllMedia = enabled) }
+    }
+
     fun save(
         context: Context,
         host: String,
@@ -109,7 +115,8 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     requireCharging = requireCharging,
                     monitoredFolders = _uiState.value.monitoredFolders,
                     sinceDateMillis = _uiState.value.sinceDateMillis,
-                    maxLogEntries = maxLogEntries
+                    maxLogEntries = maxLogEntries,
+                    scanAllMedia = _uiState.value.scanAllMedia
                 )
                 container.settingsStore.save(settings)
                 WorkScheduler.schedule(context, settings)
@@ -152,6 +159,7 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     put("requireCharging", settings.requireCharging)
                     put("sinceDateMillis", settings.sinceDateMillis ?: JSONObject.NULL)
                     put("maxLogEntries", settings.maxLogEntries)
+                    put("scanAllMedia", settings.scanAllMedia)
                     val foldersArr = JSONArray()
                     settings.monitoredFolders.forEach { f ->
                         foldersArr.put(JSONObject().apply { put("uri", f.uri); put("prefix", f.prefix) })
@@ -210,7 +218,8 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     requireCharging = json.optBoolean("requireCharging", false),
                     sinceDateMillis = sinceDate,
                     maxLogEntries = json.optInt("maxLogEntries", 100),
-                    monitoredFolders = folderEntries
+                    monitoredFolders = folderEntries,
+                    scanAllMedia = json.optBoolean("scanAllMedia", false)
                 )
                 container.settingsStore.save(settings)
 
@@ -229,6 +238,7 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                         sinceDateMillis = settings.sinceDateMillis,
                         maxLogEntries = settings.maxLogEntries,
                         monitoredFolders = folderEntries,
+                        scanAllMedia = settings.scanAllMedia,
                         importExportMessage = "Configuration imported"
                     )
                 }
