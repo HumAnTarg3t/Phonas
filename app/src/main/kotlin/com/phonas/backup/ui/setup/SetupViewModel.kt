@@ -96,6 +96,13 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
         _uiState.update { it.copy(scanAllMedia = enabled) }
     }
 
+    fun onMediaPermissionDenied() {
+        _uiState.update { it.copy(
+            scanAllMedia = false,
+            importExportMessage = "Storage permission is required to scan all device media"
+        ) }
+    }
+
     fun save(
         context: Context,
         host: String,

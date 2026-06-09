@@ -1,8 +1,12 @@
 package com.phonas.backup.ui.setup
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -88,6 +92,13 @@ fun SetupScreen(viewModel: SetupViewModel) {
     val importLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri: Uri? -> uri?.let { viewModel.importConfig(context, it) } }
+
+    val mediaPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        if (grants.values.all { it }) viewModel.setScanAllMedia(true)
+        else viewModel.onMediaPermissionDenied()
+    }
 
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) viewModel.clearSaved()
@@ -199,7 +210,25 @@ fun SetupScreen(viewModel: SetupViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Switch(checked = state.scanAllMedia, onCheckedChange = { viewModel.setScanAllMedia(it) })
+            Switch(
+                checked = state.scanAllMedia,
+                onCheckedChange = { enabled ->
+                    if (!enabled) {
+                        viewModel.setScanAllMedia(false)
+                        return@Switch
+                    }
+                    val perms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO)
+                    } else {
+                        arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+                    }
+                    val allGranted = perms.all {
+                        ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+                    }
+                    if (allGranted) viewModel.setScanAllMedia(true)
+                    else mediaPermissionLauncher.launch(perms)
+                }
+            )
         }
 
         if (!state.scanAllMedia) {
