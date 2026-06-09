@@ -1,6 +1,7 @@
 package com.phonas.backup.ui.status
 
 import android.content.Context
+import android.os.PowerManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -30,7 +31,8 @@ data class StatusUiState(
     val progress: BackupProgress? = null,
     val latestLog: BackupLogEntry? = null,
     val isConfigured: Boolean = false,
-    val nextBackupMillis: Long? = null
+    val nextBackupMillis: Long? = null,
+    val isBatteryOptimized: Boolean = false
 )
 
 class StatusViewModel(
@@ -95,6 +97,11 @@ class StatusViewModel(
 
     fun refreshConfigured() {
         _uiState.update { it.copy(isConfigured = container.credentialStore.isConfigured()) }
+    }
+
+    fun refreshBatteryOptimization(context: Context) {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        _uiState.update { it.copy(isBatteryOptimized = !pm.isIgnoringBatteryOptimizations(context.packageName)) }
     }
 
     private fun resolveStatus(workInfo: WorkInfo?, isImmediate: Boolean): Pair<BackupStatusDisplay, BackupProgress?> {

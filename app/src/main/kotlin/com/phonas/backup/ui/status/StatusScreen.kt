@@ -1,5 +1,8 @@
 package com.phonas.backup.ui.status
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import com.phonas.backup.backup.model.BackupProgress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,11 +22,15 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,10 +57,20 @@ fun StatusScreen(
     val nowMs = remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         viewModel.refreshConfigured()
+        viewModel.refreshBatteryOptimization(context)
         while (true) {
             delay(30_000L)
             nowMs.longValue = System.currentTimeMillis()
         }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshBatteryOptimization(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     Column(
@@ -96,6 +113,31 @@ fun StatusScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+
+        if (state.isBatteryOptimized) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Battery optimization is on", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Android may delay or skip scheduled backups while the screen is off. Disable battery optimization for Phonas to keep backups running on schedule.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            context.startActivity(
+                                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                    data = Uri.parse("package:${context.packageName}")
+                                }
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Disable battery optimization")
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.weight(1f))
