@@ -12,6 +12,7 @@ import com.phonas.backup.data.prefs.SettingsStore
 import com.phonas.backup.data.smb.SmbClient
 
 class AppContainer(context: Context) {
+    val appContext: Context = context.applicationContext
     val db = AppDatabase.create(context)
     val credentialStore = CredentialStore(context)
     val settingsStore = SettingsStore(context)

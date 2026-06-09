@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkManager
 import com.phonas.backup.AppContainer
 import com.phonas.backup.backup.WorkScheduler
 import com.phonas.backup.data.prefs.AppSettings
@@ -14,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -35,7 +37,8 @@ data class SetupUiState(
     val testConnectionResult: TestConnectionResult? = null,
     val isTesting: Boolean = false,
     val isSaved: Boolean = false,
-    val importExportMessage: String? = null
+    val importExportMessage: String? = null,
+    val nextBackupMillis: Long? = null
 )
 
 sealed class TestConnectionResult {
@@ -65,6 +68,15 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     scanAllMedia = settings.scanAllMedia
                 )
             }
+        }
+        viewModelScope.launch {
+            WorkManager.getInstance(container.appContext)
+                .getWorkInfosForUniqueWorkFlow(WorkScheduler.WORK_NAME_PERIODIC)
+                .collect { infos ->
+                    val now = System.currentTimeMillis()
+                    val next = infos.firstOrNull()?.nextScheduleTimeMillis?.takeIf { it > now }
+                    _uiState.update { it.copy(nextBackupMillis = next) }
+                }
         }
     }
 

@@ -295,6 +295,14 @@ fun SetupScreen(viewModel: SetupViewModel) {
             Switch(checked = requireCharging, onCheckedChange = { requireCharging = it })
         }
 
+        state.nextBackupMillis?.let { next ->
+            Text(
+                "Next scheduled backup: ${formatNextBackup(next)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
         val logOptions = listOf(25, 50, 100, 200, 500)
         val logLabel = "$maxLogEntries sessions"
 
@@ -415,3 +423,14 @@ fun SetupScreen(viewModel: SetupViewModel) {
 
 private val dateFormatter = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 private fun formatDate(epochMillis: Long): String = dateFormatter.format(Date(epochMillis))
+
+private fun formatNextBackup(epochMillis: Long): String {
+    val now = System.currentTimeMillis()
+    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+    val daysDiff = (epochMillis - now) / (1000L * 60 * 60 * 24)
+    return when {
+        daysDiff < 1 -> "today at ${timeFormat.format(Date(epochMillis))}"
+        daysDiff < 2 -> "tomorrow at ${timeFormat.format(Date(epochMillis))}"
+        else -> SimpleDateFormat("EEE d MMM 'at' HH:mm", Locale.getDefault()).format(Date(epochMillis))
+    }
+}
