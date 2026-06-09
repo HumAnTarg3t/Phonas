@@ -1,5 +1,6 @@
 package com.phonas.backup.ui.logs
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +29,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 @Composable
-fun LogsScreen(viewModel: LogsViewModel) {
+fun LogsScreen(viewModel: LogsViewModel, onLogClick: (Long) -> Unit = {}) {
     val logs by viewModel.logs.collectAsState()
 
     if (logs.isEmpty()) {
@@ -46,18 +47,22 @@ fun LogsScreen(viewModel: LogsViewModel) {
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item { }  // top spacing
+            item { }
             items(logs, key = { it.id }) { log ->
-                LogEntryCard(log)
+                LogEntryCard(log, onClick = { onLogClick(log.id) })
             }
-            item { }  // bottom spacing
+            item { }
         }
     }
 }
 
 @Composable
-private fun LogEntryCard(log: BackupLogEntry) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun LogEntryCard(log: BackupLogEntry, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
         Column(
             modifier = Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -89,14 +94,8 @@ private fun LogEntryCard(log: BackupLogEntry) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "${log.filesCopied} copied",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
-                        text = "${log.filesSkipped} skipped",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Text(text = "${log.filesCopied} copied", style = MaterialTheme.typography.bodySmall)
+                    Text(text = "${log.filesSkipped} skipped", style = MaterialTheme.typography.bodySmall)
                     if (log.filesFailed > 0) {
                         Text(
                             text = "${log.filesFailed} failed",
@@ -122,15 +121,21 @@ private fun LogEntryCard(log: BackupLogEntry) {
                     color = MaterialTheme.colorScheme.error
                 )
             }
+
+            Text(
+                text = "Tap to see file details →",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
 private val dateFormat = SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault())
 
-private fun formatDateTime(epochMillis: Long): String = dateFormat.format(Date(epochMillis))
+fun formatDateTime(epochMillis: Long): String = dateFormat.format(Date(epochMillis))
 
-private fun formatDuration(millis: Long): String {
+fun formatDuration(millis: Long): String {
     val minutes = TimeUnit.MILLISECONDS.toMinutes(millis)
     val seconds = TimeUnit.MILLISECONDS.toSeconds(millis) % 60
     return if (minutes > 0) "${minutes}m ${seconds}s" else "${seconds}s"

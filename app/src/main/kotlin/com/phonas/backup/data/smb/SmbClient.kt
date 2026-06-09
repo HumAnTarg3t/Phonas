@@ -1,7 +1,9 @@
 package com.phonas.backup.data.smb
 
 import com.hierynomus.msdtyp.AccessMask
+import com.hierynomus.msdtyp.FileTime
 import com.hierynomus.msfscc.FileAttributes
+import com.hierynomus.msfscc.fileinformation.FileBasicInformation
 import com.hierynomus.mssmb2.SMB2CreateDisposition
 import com.hierynomus.mssmb2.SMB2CreateOptions
 import com.hierynomus.mssmb2.SMB2ShareAccess
@@ -76,7 +78,7 @@ class SmbClient {
         runCatching { share!!.rm(remotePath) }
     }
 
-    fun uploadFile(input: InputStream, remotePath: String) {
+    fun uploadFile(input: InputStream, remotePath: String, lastModifiedMillis: Long? = null) {
         val file = share!!.openFile(
             remotePath,
             EnumSet.of(AccessMask.GENERIC_WRITE),
@@ -88,6 +90,11 @@ class SmbClient {
         file.use { f ->
             f.outputStream.use { out ->
                 input.copyTo(out, bufferSize = 65_536)
+            }
+            if (lastModifiedMillis != null) {
+                val wft = FileTime.ofEpochMillis(lastModifiedMillis)
+                val noChange = FileBasicInformation.DONT_UPDATE
+                f.setFileInformation(FileBasicInformation(noChange, noChange, wft, wft, 0L))
             }
         }
     }

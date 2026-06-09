@@ -53,4 +53,7 @@ interface BackupLogDao {
         "DELETE FROM backup_logs WHERE id NOT IN (SELECT id FROM backup_logs ORDER BY startTime DESC LIMIT :keep)"
     )
     suspend fun deleteOldLogs(keep: Int = 100)
+
+    @Query("DELETE FROM backup_logs")
+    suspend fun deleteAll()
 }

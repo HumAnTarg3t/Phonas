@@ -43,4 +43,7 @@ interface BackupFileDao {
         error: String?,
         timestamp: Long = System.currentTimeMillis()
     )
+
+    @Query("DELETE FROM backup_files")
+    suspend fun deleteAll()
 }

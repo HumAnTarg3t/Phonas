@@ -101,18 +101,40 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
         maxLogEntries: Int
     ) {
         viewModelScope.launch {
-            val actualPassword = if (password.isBlank()) container.credentialStore.password else password
-            container.credentialStore.save(host, share, username, actualPassword)
-            val settings = AppSettings(
-                scheduleIntervalHours = scheduleHours,
-                requireCharging = requireCharging,
-                monitoredFolders = _uiState.value.monitoredFolders,
-                sinceDateMillis = _uiState.value.sinceDateMillis,
-                maxLogEntries = maxLogEntries
-            )
-            container.settingsStore.save(settings)
-            WorkScheduler.schedule(context, settings)
-            _uiState.update { it.copy(isSaved = true, hasExistingPassword = actualPassword.isNotBlank()) }
+            runCatching {
+                val actualPassword = if (password.isBlank()) container.credentialStore.password else password
+                container.credentialStore.save(host, share, username, actualPassword)
+                val settings = AppSettings(
+                    scheduleIntervalHours = scheduleHours,
+                    requireCharging = requireCharging,
+                    monitoredFolders = _uiState.value.monitoredFolders,
+                    sinceDateMillis = _uiState.value.sinceDateMillis,
+                    maxLogEntries = maxLogEntries
+                )
+                container.settingsStore.save(settings)
+                WorkScheduler.schedule(context, settings)
+                _uiState.update {
+                    it.copy(
+                        isSaved = true,
+                        hasExistingPassword = actualPassword.isNotBlank(),
+                        importExportMessage = "Settings saved"
+                    )
+                }
+            }.onFailure { e ->
+                _uiState.update { it.copy(importExportMessage = "Failed to save settings: ${e.message}") }
+            }
+        }
+    }
+
+    fun resetDatabase() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                container.db.backupFileDao().deleteAll()
+                container.db.backupLogDao().deleteAll()
+                _uiState.update { it.copy(importExportMessage = "Database reset — all backup records cleared") }
+            }.onFailure { e ->
+                _uiState.update { it.copy(importExportMessage = "Reset failed: ${e.message}") }
+            }
         }
     }
 

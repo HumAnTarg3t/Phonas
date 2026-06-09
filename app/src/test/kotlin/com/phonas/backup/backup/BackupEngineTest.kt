@@ -7,6 +7,7 @@ import com.phonas.backup.backup.model.MediaFile
 import com.phonas.backup.data.db.AppDatabase
 import com.phonas.backup.data.db.dao.BackupFileDao
 import com.phonas.backup.data.db.dao.BackupLogDao
+import com.phonas.backup.data.db.dao.BackupSessionFileDao
 import com.phonas.backup.data.db.entity.BackupLogEntry
 import com.phonas.backup.data.db.entity.LogStatus
 import com.phonas.backup.data.prefs.AppSettings
@@ -27,6 +28,7 @@ class BackupEngineTest {
     private lateinit var db: AppDatabase
     private lateinit var fileDao: BackupFileDao
     private lateinit var logDao: BackupLogDao
+    private lateinit var sessionFileDao: BackupSessionFileDao
     private lateinit var smbClient: SmbClient
     private lateinit var fileScanner: FileScanner
     private lateinit var duplicateDetector: DuplicateDetector
@@ -42,6 +44,7 @@ class BackupEngineTest {
         db = mock()
         fileDao = mock()
         logDao = mock()
+        sessionFileDao = mock()
         smbClient = mock()
         fileScanner = mock()
         duplicateDetector = mock()
@@ -49,6 +52,7 @@ class BackupEngineTest {
 
         whenever(db.backupFileDao()).thenReturn(fileDao)
         whenever(db.backupLogDao()).thenReturn(logDao)
+        whenever(db.backupSessionFileDao()).thenReturn(sessionFileDao)
         runBlocking { whenever(logDao.insert(any())).thenReturn(1L) }
 
         engine = BackupEngine(context, db, smbClient, fileScanner, duplicateDetector, fileVerifier)

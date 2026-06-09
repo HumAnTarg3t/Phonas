@@ -3,6 +3,7 @@ package com.phonas.backup.ui.setup
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -73,6 +75,7 @@ fun SetupScreen(viewModel: SetupViewModel) {
     var scheduleDropdownExpanded by remember { mutableStateOf(false) }
     var logEntriesDropdownExpanded by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var showResetDialog by remember { mutableStateOf(false) }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -318,6 +321,34 @@ fun SetupScreen(viewModel: SetupViewModel) {
                 onClick = { importLauncher.launch(arrayOf("application/json", "*/*")) },
                 modifier = Modifier.weight(1f)
             ) { Text("Import") }
+        }
+
+        HorizontalDivider()
+
+        // ── Reset Database ────────────────────────────────────────────
+        OutlinedButton(
+            onClick = { showResetDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+        ) {
+            Text("Reset backup database")
+        }
+
+        if (showResetDialog) {
+            AlertDialog(
+                onDismissRequest = { showResetDialog = false },
+                title = { Text("Reset Database") },
+                text = { Text("This deletes all local backup records and log history. Files already on the NAS are not affected. The next backup will re-scan all files.") },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.resetDatabase(); showResetDialog = false }) {
+                        Text("Reset", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showResetDialog = false }) { Text("Cancel") }
+                }
+            )
         }
 
         Spacer(Modifier.height(8.dp))

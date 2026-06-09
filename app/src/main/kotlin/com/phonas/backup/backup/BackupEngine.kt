@@ -8,10 +8,11 @@ import com.phonas.backup.backup.model.MediaFile
 import com.phonas.backup.data.db.AppDatabase
 import com.phonas.backup.data.db.entity.BackupFileRecord
 import com.phonas.backup.data.db.entity.BackupLogEntry
+import com.phonas.backup.data.db.entity.BackupSessionFile
 import com.phonas.backup.data.db.entity.BackupStatus
 import com.phonas.backup.data.db.entity.LogStatus
+import com.phonas.backup.data.db.entity.SessionFileStatus
 import com.phonas.backup.data.prefs.AppSettings
-import com.phonas.backup.data.prefs.FolderEntry
 import com.phonas.backup.data.smb.SmbClient
 import java.security.DigestInputStream
 import java.security.MessageDigest
@@ -51,7 +52,6 @@ class BackupEngine(
                 shareName = credentials.share
             )
 
-            // Collect all files across all monitored folders
             data class IndexedFile(val file: MediaFile, val prefix: String)
 
             val allFiles = mutableListOf<IndexedFile>()
@@ -78,8 +78,14 @@ class BackupEngine(
                 val remotePath = buildRemotePath(prefix, file)
                 if (duplicateDetector.shouldSkip(file, smbClient, remotePath)) {
                     filesSkipped++
+                    db.backupSessionFileDao().insert(
+                        BackupSessionFile(
+                            logId = logId, filename = file.name, nasPath = remotePath,
+                            actionStatus = SessionFileStatus.SKIPPED, fileSize = file.size
+                        )
+                    )
                 } else {
-                    val (success, bytes) = transferAndVerify(file, remotePath)
+                    val (success, bytes) = transferAndVerify(file, remotePath, logId)
                     if (success) {
                         filesCopied++
                         bytesTransferred += bytes
@@ -102,18 +108,18 @@ class BackupEngine(
         }
     }
 
-    private suspend fun transferAndVerify(file: MediaFile, remotePath: String): Pair<Boolean, Long> {
+    private suspend fun transferAndVerify(file: MediaFile, remotePath: String, logId: Long): Pair<Boolean, Long> {
         return try {
             val parentPath = remotePath.substringBeforeLast("\\", "")
             if (parentPath.isNotEmpty()) smbClient.ensureDirectory(parentPath)
 
             val digest = MessageDigest.getInstance("SHA-256")
             val input = context.contentResolver.openInputStream(file.uri)
-                ?: return markFailed(file, remotePath, "Cannot open source file")
+                ?: return markFailed(file, remotePath, "Cannot open source file", logId)
 
             input.use { raw ->
                 DigestInputStream(raw, digest).use { digestStream ->
-                    smbClient.uploadFile(digestStream, remotePath)
+                    smbClient.uploadFile(digestStream, remotePath, file.lastModified)
                 }
             }
 
@@ -127,7 +133,7 @@ class BackupEngine(
                     sha256 = localHash,
                     backedUpAt = System.currentTimeMillis()
                 )
-                // Ensure the record exists (markSuccess only updates if row already present)
+                // Ensure record exists (markSuccess only updates if row already present)
                 if (db.backupFileDao().findByUri(file.uri.toString()) == null) {
                     db.backupFileDao().upsert(
                         BackupFileRecord(
@@ -144,18 +150,24 @@ class BackupEngine(
                         )
                     )
                 }
+                db.backupSessionFileDao().insert(
+                    BackupSessionFile(
+                        logId = logId, filename = file.name, nasPath = remotePath,
+                        actionStatus = SessionFileStatus.COPIED, fileSize = file.size
+                    )
+                )
                 Pair(true, file.size)
             } else {
                 smbClient.deleteFile(remotePath)
-                markFailed(file, remotePath, "Verification failed")
+                markFailed(file, remotePath, "Verification failed", logId)
             }
         } catch (e: Exception) {
             runCatching { smbClient.deleteFile(remotePath) }
-            markFailed(file, remotePath, sanitizeError(e.message))
+            markFailed(file, remotePath, sanitizeError(e.message), logId)
         }
     }
 
-    private suspend fun markFailed(file: MediaFile, remotePath: String, error: String): Pair<Boolean, Long> {
+    private suspend fun markFailed(file: MediaFile, remotePath: String, error: String, logId: Long): Pair<Boolean, Long> {
         val existing = db.backupFileDao().findByUri(file.uri.toString())
         if (existing == null) {
             db.backupFileDao().upsert(
@@ -175,6 +187,12 @@ class BackupEngine(
         } else {
             db.backupFileDao().markFailed(file.uri.toString(), error)
         }
+        db.backupSessionFileDao().insert(
+            BackupSessionFile(
+                logId = logId, filename = file.name, nasPath = remotePath,
+                actionStatus = SessionFileStatus.FAILED, fileSize = file.size, errorMessage = error
+            )
+        )
         return Pair(false, 0L)
     }
 
