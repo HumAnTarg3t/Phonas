@@ -295,7 +295,8 @@ fun SetupScreen(viewModel: SetupViewModel) {
             Switch(checked = requireCharging, onCheckedChange = { requireCharging = it })
         }
 
-        state.nextBackupMillis?.let { next ->
+        state.lastCompletedBackupMillis?.let { base ->
+            val next = base + scheduleHours * 3_600_000L
             val now = System.currentTimeMillis()
             Text(
                 if (next <= now) "Backup overdue — will run when on Wi-Fi"

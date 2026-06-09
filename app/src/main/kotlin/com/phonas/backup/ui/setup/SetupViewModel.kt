@@ -37,7 +37,7 @@ data class SetupUiState(
     val isTesting: Boolean = false,
     val isSaved: Boolean = false,
     val importExportMessage: String? = null,
-    val nextBackupMillis: Long? = null
+    val lastCompletedBackupMillis: Long? = null
 )
 
 sealed class TestConnectionResult {
@@ -71,11 +71,8 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             container.db.backupLogDao().getLastCompletedLogFlow()
                 .collect { lastCompleted ->
-                    val settings = container.settingsStore.settings.first()
-                    val intervalMs = settings.scheduleIntervalHours * 3_600_000L
                     val base = lastCompleted?.endTime ?: lastCompleted?.startTime
-                    val next = if (base != null) base + intervalMs else null
-                    _uiState.update { it.copy(nextBackupMillis = next) }
+                    _uiState.update { it.copy(lastCompletedBackupMillis = base) }
                 }
         }
     }
