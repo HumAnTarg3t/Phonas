@@ -11,11 +11,15 @@ An Android app that automatically backs up photos and videos from your phone to 
 - Only operates on Wi-Fi; skips if the NAS is unreachable
 - Incremental backups — skips files already on the NAS
 - SHA-256 verification of every transferred file (≤500 MB)
-- Preserves folder structure and original filenames
+- Preserves folder structure, original filenames, and original file modification dates on the NAS
+- **Scan all device media** — backs up every photo and video on the device (DCIM, WhatsApp, Screenshots, Downloads, etc.) without selecting folders manually
+- Optional per-folder NAS prefix to organise files under custom subdirectories
 - Optional date filter — only back up files modified on or after a chosen date
+- Clickable log entries showing per-file detail (copied / skipped / failed) for each backup session
 - Configurable log retention (25 / 50 / 100 / 200 / 500 sessions)
 - Export and import the full configuration as a JSON file
 - Credentials stored with Android Keystore encryption (password excluded from exports)
+- Database reset button for testing
 - Simple three-screen UI: Status, Logs, Setup
 
 ---
@@ -38,32 +42,19 @@ An Android app that automatically backs up photos and videos from your phone to 
 
 ### Build
 
-```bash
-.\gradlew.bat assembleDebug        # debug APK
-.\gradlew.bat assembleRelease      # release APK (minified)
-```
+In Android Studio: **Build → Build Bundle(s) / APK(s) → Build APK(s)**
 
 Output: `app/build/outputs/apk/debug/app-debug.apk`
 
 ### Install (USB debugging)
 
-```bash
-.\gradlew.bat installDebug
-```
+In Android Studio: **Run → Run 'app'**
 
 For sideloading without USB debugging, see [SIDELOAD.md](SIDELOAD.md).
 
 ### Run unit tests
 
-```bash
-.\gradlew.bat test
-```
-
-### Run instrumented tests (device or emulator required)
-
-```bash
-.\gradlew.bat connectedAndroidTest
-```
+In Android Studio: **Run → Run All Tests**, or right-click the `test` source set and select **Run Tests**.
 
 ---
 
@@ -74,13 +65,14 @@ UI (Compose)          3 screens: Status, Logs, Setup
     ↓                 ViewModels observe Flow from Room + WorkManager
 BackupEngine          Orchestrates scan → duplicate check → transfer → verify
     ↓
-SmbClient             SMBJ-based SMB2/3 client
+SmbClient             SMBJ-based SMB2/3 client; sets original file timestamps via FileBasicInformation
 FileScanner           Traverses SAF document trees; applies date filter
+MediaStoreScanner     Queries MediaStore for all device photos and videos (scan-all mode)
 FileVerifier          SHA-256 streaming hash for local and remote files
 DuplicateDetector     DB-first check, NAS fallback
     ↓
-Room DB               Tracks backed-up files and session logs (capped by maxLogEntries)
-DataStore             Non-sensitive settings (schedule, charging, date filter, log retention)
+Room DB               Tracks backed-up files, session logs, and per-file session detail (capped by maxLogEntries)
+DataStore             Non-sensitive settings (schedule, charging, date filter, log retention, scan mode)
 EncryptedSharedPrefs  Credentials (host, share, username, password) — Keystore-backed
 WorkManager           Periodic and on-demand backup jobs
 ```
@@ -115,11 +107,13 @@ No Hilt. `AppContainer` holds singleton instances and is created in `BackupAppli
    - **Shared Folder Name** — the SMB share name, e.g. `Photos`
    - **Username** and **Password**
 3. Tap **Test Connection** to verify before saving.
-4. Tap **Add Folder** to select one or more phone folders to back up.
+4. Choose how to select files:
+   - **Scan all device media** — turn this on to back up everything on the device (photos, videos, WhatsApp, Screenshots, etc.) without selecting individual folders. The app will request storage permission on first enable.
+   - **Manual folders** — tap **Add Folder** to select specific folders. An optional NAS prefix can be set per folder to organise files under a custom subdirectory on the NAS.
 5. Choose a **backup interval** (1h / 6h / 12h / 24h) and optional charging-only requirement.
 6. Optionally set **Keep backup logs** (how many backup sessions to retain in history).
 7. Optionally set **Skip Files Older Than** to ignore files before a specific date.
-8. Tap **Save**. The first scheduled backup runs automatically when on Wi-Fi.
+8. Tap **Save**. A confirmation message appears briefly. The first scheduled backup runs automatically when on Wi-Fi.
 
 Tap **Back Up Now** on the Status screen to trigger an immediate backup.
 
@@ -127,9 +121,23 @@ Tap **Back Up Now** on the Status screen to trigger an immediate backup.
 
 ## Date Filter
 
-The "Skip Files Older Than" setting lets you start the first backup from a specific date rather than copying your entire photo library. Set it to e.g. 1 June 2026, and only files modified on or after that date will be backed up — on every run, not just the first.
+The "Skip Files Older Than" setting lets you start the first backup from a specific date rather than copying your entire photo library. Set it to e.g. 1 May 2026, and only files modified on or after that date will be backed up — on every run, not just the first.
 
-The filter is permanent. Files before the cutoff are never backed up. To back up everything, clear the date in Setup.
+The filter is permanent. Files before the cutoff are never backed up. To back up everything, tap **Clear** next to the date in Setup.
+
+Use the date picker carefully — selecting a future date will result in zero files being backed up.
+
+---
+
+## Viewing Backup Details
+
+On the Logs screen, tap any backup session to see a full per-file breakdown:
+
+- **Copied** — file was transferred and verified successfully
+- **Skipped** — file was already on the NAS, no transfer needed
+- **Failed** — transfer or verification failed (error message shown)
+
+The NAS path and file size are shown for each entry.
 
 ---
 
@@ -143,11 +151,17 @@ Tap **Import** and select a previously exported JSON file to restore settings. O
 
 ## NAS Path Structure
 
+**Scan all device media mode:**
 ```
-[Share]/[Source folder name]/[relative subfolder]/filename.jpg
+[Share]/[relative path from MediaStore]/filename.jpg
 ```
+Example: a WhatsApp image at `Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images/img.jpg` on the phone is stored at `Photos\Android\media\com.whatsapp\WhatsApp\Media\WhatsApp Images\img.jpg` on the NAS.
 
-Example: selecting the `Camera` folder on your phone writes files to `Photos\Camera\IMG_001.jpg` on the NAS.
+**Manual folder mode:**
+```
+[Share]/[optional prefix]/[relative subfolder]/filename.jpg
+```
+Example: selecting the `DCIM/Camera` folder with prefix `camera` writes files to `Photos\camera\IMG_001.jpg`.
 
 ---
 
@@ -170,6 +184,8 @@ Every transferred file is verified before being marked successful:
 
 If verification fails, the partial remote file is deleted and the transfer is retried on the next run.
 
+The original file modification date is preserved on the NAS copy via SMB `FileBasicInformation`.
+
 ---
 
 ## Security
@@ -187,8 +203,19 @@ Android ships an incomplete BouncyCastle provider. `BackupApplication.onCreate()
 
 ---
 
+## NAS Recycle Bin
+
+If files appear in a `#Recycle` folder on the NAS instead of being deleted cleanly, the NAS recycle bin feature is enabled on the backup share. This is a NAS setting, not an app behaviour. Disable it in your NAS admin panel:
+
+- **Synology**: Shared Folder → Edit → uncheck "Enable Recycle Bin"
+- **QNAP**: Shared Folders → Edit → uncheck "Enable Recycle Bin"
+- **TrueNAS**: Dataset properties → disable recycle bin / shadow copies
+
+---
+
 ## Known Limitations
 
-- `DocumentFile.listFiles()` is slow for very large directories due to SAF overhead. For a library of 50,000+ files, the initial scan can take several minutes. Subsequent runs are fast because most files are skipped via the DB lookup.
+- SAF-based folder scanning (`DocumentFile.listFiles()`) is slow for very large directories. For a library of 50,000+ files, the initial scan can take several minutes. Use "Scan all device media" mode to avoid this — MediaStore queries are fast regardless of library size.
 - The app does not retry individual failed files within a session. Failures are logged and retried on the next scheduled run.
 - Folder URI permissions granted via SAF are device-specific. Importing a config on a new device restores all other settings but requires re-selecting folders manually.
+- In "Scan all device media" mode, storage permission (`READ_MEDIA_IMAGES` / `READ_MEDIA_VIDEO` on Android 13+) must be granted. The app prompts for this when the toggle is first enabled.
