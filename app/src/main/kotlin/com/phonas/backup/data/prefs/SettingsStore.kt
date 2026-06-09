@@ -19,7 +19,8 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 class SettingsStore(private val context: Context) {
 
     private object Keys {
-        val SCHEDULE_HOURS = intPreferencesKey("schedule_hours")
+        val SCHEDULE_HOURS = intPreferencesKey("schedule_hours")   // legacy, read for migration
+        val SCHEDULE_MINUTES = intPreferencesKey("schedule_minutes")
         val REQUIRE_CHARGING = booleanPreferencesKey("require_charging")
         val FOLDER_URIS = stringPreferencesKey("folder_uris")      // legacy, read-only for migration
         val FOLDERS_JSON = stringPreferencesKey("folders_json")     // current format
@@ -30,7 +31,8 @@ class SettingsStore(private val context: Context) {
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
         AppSettings(
-            scheduleIntervalHours = prefs[Keys.SCHEDULE_HOURS] ?: 24,
+            scheduleIntervalMinutes = prefs[Keys.SCHEDULE_MINUTES]
+                ?: ((prefs[Keys.SCHEDULE_HOURS] ?: 24) * 60),
             requireCharging = prefs[Keys.REQUIRE_CHARGING] ?: false,
             monitoredFolders = when {
                 prefs[Keys.FOLDERS_JSON] != null -> parseFolders(prefs[Keys.FOLDERS_JSON]!!)
@@ -47,7 +49,7 @@ class SettingsStore(private val context: Context) {
 
     suspend fun save(settings: AppSettings) {
         context.dataStore.edit { prefs ->
-            prefs[Keys.SCHEDULE_HOURS] = settings.scheduleIntervalHours
+            prefs[Keys.SCHEDULE_MINUTES] = settings.scheduleIntervalMinutes
             prefs[Keys.REQUIRE_CHARGING] = settings.requireCharging
             prefs[Keys.FOLDERS_JSON] = serializeFolders(settings.monitoredFolders)
             prefs[Keys.SINCE_DATE] = settings.sinceDateMillis ?: 0L

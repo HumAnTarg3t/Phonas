@@ -73,7 +73,7 @@ fun SetupScreen(viewModel: SetupViewModel) {
     var share by remember(state.nasShare) { mutableStateOf(state.nasShare) }
     var username by remember(state.username) { mutableStateOf(state.username) }
     var password by remember { mutableStateOf("") }
-    var scheduleHours by remember(state.scheduleIntervalHours) { mutableStateOf(state.scheduleIntervalHours) }
+    var scheduleMinutes by remember(state.scheduleIntervalMinutes) { mutableStateOf(state.scheduleIntervalMinutes) }
     var requireCharging by remember(state.requireCharging) { mutableStateOf(state.requireCharging) }
     var maxLogEntries by remember(state.maxLogEntries) { mutableStateOf(state.maxLogEntries) }
     var scheduleDropdownExpanded by remember { mutableStateOf(false) }
@@ -273,8 +273,14 @@ fun SetupScreen(viewModel: SetupViewModel) {
         // ── Schedule ──────────────────────────────────────────────────
         Text(stringResource(R.string.label_schedule), style = MaterialTheme.typography.titleMedium)
 
-        val scheduleOptions = listOf(1 to "Every hour", 6 to "Every 6 hours", 12 to "Every 12 hours", 24 to "Every day")
-        val scheduleLabel = scheduleOptions.firstOrNull { it.first == scheduleHours }?.second ?: "Every $scheduleHours hours"
+        val scheduleOptions = listOf(
+            15 to "Every 15 minutes",
+            60 to "Every hour",
+            360 to "Every 6 hours",
+            720 to "Every 12 hours",
+            1440 to "Every day"
+        )
+        val scheduleLabel = scheduleOptions.firstOrNull { it.first == scheduleMinutes }?.second ?: "Every $scheduleMinutes minutes"
 
         ExposedDropdownMenuBox(expanded = scheduleDropdownExpanded, onExpandedChange = { scheduleDropdownExpanded = it }) {
             OutlinedTextField(
@@ -284,8 +290,8 @@ fun SetupScreen(viewModel: SetupViewModel) {
                 modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth()
             )
             ExposedDropdownMenu(expanded = scheduleDropdownExpanded, onDismissRequest = { scheduleDropdownExpanded = false }) {
-                scheduleOptions.forEach { (hours, label) ->
-                    DropdownMenuItem(text = { Text(label) }, onClick = { scheduleHours = hours; scheduleDropdownExpanded = false })
+                scheduleOptions.forEach { (minutes, label) ->
+                    DropdownMenuItem(text = { Text(label) }, onClick = { scheduleMinutes = minutes; scheduleDropdownExpanded = false })
                 }
             }
         }
@@ -296,7 +302,7 @@ fun SetupScreen(viewModel: SetupViewModel) {
         }
 
         state.lastCompletedBackupMillis?.let { base ->
-            val next = base + scheduleHours * 3_600_000L
+            val next = base + scheduleMinutes * 60_000L
             val now = System.currentTimeMillis()
             Text(
                 if (next <= now) "Backup overdue — will run when on Wi-Fi"
@@ -414,7 +420,7 @@ fun SetupScreen(viewModel: SetupViewModel) {
         // ── Save ──────────────────────────────────────────────────────
         Button(
             onClick = {
-                viewModel.save(context, host, share, username, password, scheduleHours, requireCharging, maxLogEntries)
+                viewModel.save(context, host, share, username, password, scheduleMinutes, requireCharging, maxLogEntries)
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = host.isNotBlank() && share.isNotBlank() && username.isNotBlank()
@@ -428,12 +434,19 @@ private val dateFormatter = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 private fun formatDate(epochMillis: Long): String = dateFormatter.format(Date(epochMillis))
 
 private fun formatNextBackup(epochMillis: Long): String {
-    val now = System.currentTimeMillis()
     val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-    val daysDiff = (epochMillis - now) / (1000L * 60 * 60 * 24)
+    val cal = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 0)
+        set(java.util.Calendar.MINUTE, 0)
+        set(java.util.Calendar.SECOND, 0)
+        set(java.util.Calendar.MILLISECOND, 0)
+    }
+    val todayStart = cal.timeInMillis
+    val tomorrowStart = todayStart + 86_400_000L
+    val dayAfterStart = tomorrowStart + 86_400_000L
     return when {
-        daysDiff < 1 -> "today at ${timeFormat.format(Date(epochMillis))}"
-        daysDiff < 2 -> "tomorrow at ${timeFormat.format(Date(epochMillis))}"
+        epochMillis < tomorrowStart -> "today at ${timeFormat.format(Date(epochMillis))}"
+        epochMillis < dayAfterStart -> "tomorrow at ${timeFormat.format(Date(epochMillis))}"
         else -> SimpleDateFormat("EEE d MMM 'at' HH:mm", Locale.getDefault()).format(Date(epochMillis))
     }
 }

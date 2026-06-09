@@ -21,9 +21,11 @@ object WorkScheduler {
     fun schedule(context: Context, settings: AppSettings) {
         val constraints = buildConstraints(settings)
 
+        val intervalMinutes = settings.scheduleIntervalMinutes.toLong()
+        val flexMinutes = minOf(15L, intervalMinutes)
         val request = PeriodicWorkRequestBuilder<BackupWorker>(
-            settings.scheduleIntervalHours.toLong(), TimeUnit.HOURS,
-            15L, TimeUnit.MINUTES
+            intervalMinutes, TimeUnit.MINUTES,
+            flexMinutes, TimeUnit.MINUTES
         )
             .setConstraints(constraints)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
@@ -31,7 +33,7 @@ object WorkScheduler {
 
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             WORK_NAME_PERIODIC,
-            ExistingPeriodicWorkPolicy.UPDATE,
+            ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
             request
         )
     }

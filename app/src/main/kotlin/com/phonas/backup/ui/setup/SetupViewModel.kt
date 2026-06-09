@@ -27,7 +27,7 @@ data class SetupUiState(
     val nasShare: String = "",
     val username: String = "",
     val hasExistingPassword: Boolean = false,
-    val scheduleIntervalHours: Int = 24,
+    val scheduleIntervalMinutes: Int = 1440,
     val requireCharging: Boolean = false,
     val monitoredFolders: List<FolderEntry> = emptyList(),
     val sinceDateMillis: Long? = null,
@@ -59,7 +59,7 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     nasShare = container.credentialStore.nasShare,
                     username = container.credentialStore.username,
                     hasExistingPassword = container.credentialStore.password.isNotBlank(),
-                    scheduleIntervalHours = settings.scheduleIntervalHours,
+                    scheduleIntervalMinutes = settings.scheduleIntervalMinutes,
                     requireCharging = settings.requireCharging,
                     monitoredFolders = settings.monitoredFolders,
                     sinceDateMillis = settings.sinceDateMillis,
@@ -118,7 +118,7 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
         share: String,
         username: String,
         password: String,
-        scheduleHours: Int,
+        scheduleMinutes: Int,
         requireCharging: Boolean,
         maxLogEntries: Int
     ) {
@@ -127,7 +127,7 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                 val actualPassword = if (password.isBlank()) container.credentialStore.password else password
                 container.credentialStore.save(host, share, username, actualPassword)
                 val settings = AppSettings(
-                    scheduleIntervalHours = scheduleHours,
+                    scheduleIntervalMinutes = scheduleMinutes,
                     requireCharging = requireCharging,
                     monitoredFolders = _uiState.value.monitoredFolders,
                     sinceDateMillis = _uiState.value.sinceDateMillis,
@@ -171,7 +171,7 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     put("nasShare", container.credentialStore.nasShare)
                     put("username", container.credentialStore.username)
                     put("password", "")
-                    put("scheduleIntervalHours", settings.scheduleIntervalHours)
+                    put("scheduleIntervalMinutes", settings.scheduleIntervalMinutes)
                     put("requireCharging", settings.requireCharging)
                     put("sinceDateMillis", settings.sinceDateMillis ?: JSONObject.NULL)
                     put("maxLogEntries", settings.maxLogEntries)
@@ -230,7 +230,11 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                 }
 
                 val settings = AppSettings(
-                    scheduleIntervalHours = json.optInt("scheduleIntervalHours", 24),
+                    scheduleIntervalMinutes = when {
+                        json.has("scheduleIntervalMinutes") -> json.optInt("scheduleIntervalMinutes", 1440)
+                        json.has("scheduleIntervalHours") -> json.optInt("scheduleIntervalHours", 24) * 60
+                        else -> 1440
+                    },
                     requireCharging = json.optBoolean("requireCharging", false),
                     sinceDateMillis = sinceDate,
                     maxLogEntries = json.optInt("maxLogEntries", 100),
@@ -249,7 +253,7 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                         nasShare = share,
                         username = username,
                         hasExistingPassword = actualPassword.isNotBlank(),
-                        scheduleIntervalHours = settings.scheduleIntervalHours,
+                        scheduleIntervalMinutes = settings.scheduleIntervalMinutes,
                         requireCharging = settings.requireCharging,
                         sinceDateMillis = settings.sinceDateMillis,
                         maxLogEntries = settings.maxLogEntries,
