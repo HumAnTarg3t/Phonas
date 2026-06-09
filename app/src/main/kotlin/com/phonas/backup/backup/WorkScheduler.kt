@@ -55,6 +55,10 @@ object WorkScheduler {
         WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME_PERIODIC)
     }
 
+    fun cancelImmediate(context: Context) {
+        WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME_IMMEDIATE)
+    }
+
     private fun buildConstraints(settings: AppSettings): Constraints {
         return Constraints.Builder()
             .setRequiredNetworkType(NetworkType.UNMETERED)

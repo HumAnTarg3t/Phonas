@@ -127,6 +127,8 @@ The filter is permanent. Files before the cutoff are never backed up. To back up
 
 Use the date picker carefully — selecting a future date will result in zero files being backed up.
 
+The date filter is not a "since last backup" marker. It is a fixed cutoff that applies on every run. If you remove the date filter after a partial backup, the next run will scan all photos on the device and copy any that have never been backed up — including photos older than your previous cutoff. To avoid this, either keep the filter in place or advance it to today's date after completing a full backup.
+
 ---
 
 ## Viewing Backup Details

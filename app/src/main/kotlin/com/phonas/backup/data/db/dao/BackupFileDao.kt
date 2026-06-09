@@ -15,6 +15,9 @@ interface BackupFileDao {
     @Query("SELECT * FROM backup_files WHERE nasPath = :path LIMIT 1")
     suspend fun findByNasPath(path: String): BackupFileRecord?
 
+    @Query("SELECT * FROM backup_files WHERE relativePath = :path AND filename = :filename AND status = 'SUCCESS' LIMIT 1")
+    suspend fun findByRelativePathAndName(path: String, filename: String): BackupFileRecord?
+
     @Query("SELECT * FROM backup_files WHERE status = 'FAILED'")
     suspend fun findAllFailed(): List<BackupFileRecord>
 

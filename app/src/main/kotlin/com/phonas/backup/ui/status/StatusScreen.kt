@@ -9,10 +9,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,6 +58,17 @@ fun StatusScreen(
 
         if (state.status == BackupStatusDisplay.BACKING_UP && state.progress != null) {
             ProgressCard(progress = state.progress!!)
+        }
+
+        if (state.status == BackupStatusDisplay.BACKING_UP) {
+            OutlinedButton(
+                onClick = { viewModel.cancelBackupNow(context) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+            ) {
+                Text("Stop Backup")
+            }
         }
 
         state.latestLog?.let { log ->

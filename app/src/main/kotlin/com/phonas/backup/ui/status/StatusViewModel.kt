@@ -74,6 +74,10 @@ class StatusViewModel(
         }
     }
 
+    fun cancelBackupNow(context: Context) {
+        viewModelScope.launch { WorkScheduler.cancelImmediate(context) }
+    }
+
     fun refreshConfigured() {
         _uiState.update { it.copy(isConfigured = container.credentialStore.isConfigured()) }
     }

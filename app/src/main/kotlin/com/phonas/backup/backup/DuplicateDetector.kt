@@ -13,7 +13,16 @@ class DuplicateDetector(
     private val hashThresholdBytes = 500L * 1024 * 1024
 
     suspend fun shouldSkip(file: MediaFile, smbClient: SmbClient, remotePath: String): Boolean {
-        val record = db.backupFileDao().findByUri(file.uri.toString())
+        var record = db.backupFileDao().findByUri(file.uri.toString())
+
+        // MediaStore IDs can change on reindex; fall back to stable path+name lookup
+        if (record == null) {
+            record = db.backupFileDao().findByRelativePathAndName(file.relativePath, file.name)
+            if (record != null) {
+                // Self-heal: store the new URI for future fast-path hits
+                db.backupFileDao().upsert(record.copy(localUri = file.uri.toString()))
+            }
+        }
 
         // Fast path: DB record matches current metadata exactly
         if (record != null

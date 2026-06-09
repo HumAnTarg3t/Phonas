@@ -5,6 +5,8 @@ import com.phonas.backup.backup.model.MediaFile
 import com.phonas.backup.data.smb.SmbClient
 import java.security.MessageDigest
 
+enum class VerificationOutcome { VERIFIED, NOT_FOUND, MISMATCH }
+
 class FileVerifier(private val context: Context) {
 
     private val hashThresholdBytes = 500L * 1024 * 1024  // 500 MB
@@ -33,14 +35,14 @@ class FileVerifier(private val context: Context) {
         return digest.digest().toHexString()
     }
 
-    fun verify(file: MediaFile, remotePath: String, localHash: String, smb: SmbClient): Boolean {
-        val remoteInfo = smb.getRemoteFileInfo(remotePath) ?: return false
-        if (remoteInfo.size != file.size) return false
+    fun verify(file: MediaFile, remotePath: String, localHash: String, smb: SmbClient): VerificationOutcome {
+        val remoteInfo = smb.getRemoteFileInfo(remotePath) ?: return VerificationOutcome.NOT_FOUND
+        if (remoteInfo.size != file.size) return VerificationOutcome.MISMATCH
         if (file.size <= hashThresholdBytes) {
             val remoteHash = computeRemoteHash(remotePath, smb)
-            return localHash == remoteHash
+            return if (localHash == remoteHash) VerificationOutcome.VERIFIED else VerificationOutcome.MISMATCH
         }
-        return true
+        return VerificationOutcome.VERIFIED
     }
 
     private fun ByteArray.toHexString(): String = joinToString("") { "%02x".format(it) }

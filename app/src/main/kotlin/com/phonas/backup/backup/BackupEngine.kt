@@ -17,6 +17,8 @@ import com.phonas.backup.data.smb.SmbClient
 
 import java.security.DigestInputStream
 import java.security.MessageDigest
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 
 data class NasCredentials(
     val host: String,
@@ -107,6 +109,12 @@ class BackupEngine(
             db.backupLogDao().updateCompleted(logId, endTime, filesCopied, filesSkipped, filesFailed, bytesTransferred)
             db.backupLogDao().deleteOldLogs(settings.maxLogEntries)
             BackupResult.Success(filesCopied, filesSkipped, filesFailed, bytesTransferred)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            withContext(NonCancellable) {
+                db.backupLogDao().cancelStaleRunning(System.currentTimeMillis())
+                db.backupLogDao().deleteOldLogs(settings.maxLogEntries)
+            }
+            throw e
         } catch (e: Exception) {
             db.backupLogDao().updateFailed(logId, System.currentTimeMillis(), sanitizeError(e.message))
             db.backupLogDao().deleteOldLogs(settings.maxLogEntries)
@@ -132,42 +140,48 @@ class BackupEngine(
             }
 
             val localHash = digest.digest().toHexString()
-            val verified = fileVerifier.verify(file, remotePath, localHash, smbClient)
+            val outcome = fileVerifier.verify(file, remotePath, localHash, smbClient)
 
-            if (verified) {
-                db.backupFileDao().markSuccess(
-                    uri = file.uri.toString(),
-                    nasPath = remotePath,
-                    sha256 = localHash,
-                    backedUpAt = System.currentTimeMillis()
-                )
-                // Ensure record exists (markSuccess only updates if row already present)
-                if (db.backupFileDao().findByUri(file.uri.toString()) == null) {
-                    db.backupFileDao().upsert(
-                        BackupFileRecord(
-                            localUri = file.uri.toString(),
-                            relativePath = file.relativePath,
-                            filename = file.name,
-                            fileSize = file.size,
-                            lastModified = file.lastModified,
-                            localSha256 = localHash,
-                            nasPath = remotePath,
-                            backedUpAt = System.currentTimeMillis(),
-                            status = BackupStatus.SUCCESS,
-                            errorMessage = null
+            when (outcome) {
+                VerificationOutcome.VERIFIED, VerificationOutcome.NOT_FOUND -> {
+                    // VERIFIED: hash confirmed. NOT_FOUND: NAS automation moved the file after
+                    // upload but before verification. SMBJ throws on write failure, so if
+                    // uploadFile() returned normally the data was accepted by the NAS.
+                    db.backupFileDao().markSuccess(
+                        uri = file.uri.toString(),
+                        nasPath = remotePath,
+                        sha256 = localHash,
+                        backedUpAt = System.currentTimeMillis()
+                    )
+                    // Ensure record exists (markSuccess only updates if row already present)
+                    if (db.backupFileDao().findByUri(file.uri.toString()) == null) {
+                        db.backupFileDao().upsert(
+                            BackupFileRecord(
+                                localUri = file.uri.toString(),
+                                relativePath = file.relativePath,
+                                filename = file.name,
+                                fileSize = file.size,
+                                lastModified = file.lastModified,
+                                localSha256 = localHash,
+                                nasPath = remotePath,
+                                backedUpAt = System.currentTimeMillis(),
+                                status = BackupStatus.SUCCESS,
+                                errorMessage = null
+                            )
+                        )
+                    }
+                    db.backupSessionFileDao().insert(
+                        BackupSessionFile(
+                            logId = logId, filename = file.name, nasPath = remotePath,
+                            actionStatus = SessionFileStatus.COPIED, fileSize = file.size
                         )
                     )
+                    Pair(true, file.size)
                 }
-                db.backupSessionFileDao().insert(
-                    BackupSessionFile(
-                        logId = logId, filename = file.name, nasPath = remotePath,
-                        actionStatus = SessionFileStatus.COPIED, fileSize = file.size
-                    )
-                )
-                Pair(true, file.size)
-            } else {
-                smbClient.deleteFile(remotePath)
-                markFailed(file, remotePath, "Verification failed", logId)
+                VerificationOutcome.MISMATCH -> {
+                    runCatching { smbClient.deleteFile(remotePath) }
+                    markFailed(file, remotePath, "Verification failed: hash mismatch", logId)
+                }
             }
         } catch (e: Exception) {
             runCatching { smbClient.deleteFile(remotePath) }
