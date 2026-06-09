@@ -5,8 +5,7 @@ import android.net.Uri
 import com.phonas.backup.backup.model.MediaFile
 import com.phonas.backup.data.smb.RemoteFileInfo
 import com.phonas.backup.data.smb.SmbClient
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -32,28 +31,28 @@ class FileVerifierTest {
     }
 
     @Test
-    fun `verify returns false when remote file size differs`() {
+    fun `verify returns MISMATCH when remote file size differs`() {
         val file = mediaFile(size = 100L)
         whenever(smb.getRemoteFileInfo(any())).thenReturn(RemoteFileInfo(size = 999L, lastModified = 0))
 
         val result = verifier.verify(file, "remote\\path\\file.jpg", "anyHash", smb)
 
-        assertFalse(result)
+        assertEquals(VerificationOutcome.MISMATCH, result)
     }
 
     @Test
-    fun `verify returns true on matching size for large file without hash`() {
+    fun `verify returns VERIFIED on matching size for large file without hash`() {
         val largeSize = 600L * 1024 * 1024  // 600 MB — above hash threshold
         val file = mediaFile(size = largeSize)
         whenever(smb.getRemoteFileInfo(any())).thenReturn(RemoteFileInfo(size = largeSize, lastModified = 0))
 
         val result = verifier.verify(file, "remote\\path\\file.mp4", "ignoredHash", smb)
 
-        assertTrue(result)
+        assertEquals(VerificationOutcome.VERIFIED, result)
     }
 
     @Test
-    fun `verify returns true when sizes and hashes match for small file`() {
+    fun `verify returns VERIFIED when sizes and hashes match for small file`() {
         val file = mediaFile(size = testBytes.size.toLong())
         whenever(smb.getRemoteFileInfo(any())).thenReturn(
             RemoteFileInfo(size = testBytes.size.toLong(), lastModified = 0)
@@ -62,11 +61,11 @@ class FileVerifierTest {
 
         val result = verifier.verify(file, "remote\\path\\file.jpg", testHash, smb)
 
-        assertTrue(result)
+        assertEquals(VerificationOutcome.VERIFIED, result)
     }
 
     @Test
-    fun `verify returns false when hashes differ`() {
+    fun `verify returns MISMATCH when hashes differ`() {
         val file = mediaFile(size = testBytes.size.toLong())
         val differentBytes = "Different content".toByteArray()
         whenever(smb.getRemoteFileInfo(any())).thenReturn(
@@ -77,17 +76,17 @@ class FileVerifierTest {
 
         val result = verifier.verify(file, "remote\\path\\file.jpg", testHash, smb)
 
-        assertFalse(result)
+        assertEquals(VerificationOutcome.MISMATCH, result)
     }
 
     @Test
-    fun `verify returns false when remote file info is null`() {
+    fun `verify returns NOT_FOUND when remote file info is null`() {
         val file = mediaFile(size = 100L)
         whenever(smb.getRemoteFileInfo(any())).thenReturn(null)
 
         val result = verifier.verify(file, "remote\\path\\file.jpg", "anyHash", smb)
 
-        assertFalse(result)
+        assertEquals(VerificationOutcome.NOT_FOUND, result)
     }
 
     private fun mediaFile(size: Long) = MediaFile(
