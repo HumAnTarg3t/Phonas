@@ -7,8 +7,8 @@ An Android app that automatically backs up photos and videos from your phone to 
 ## Features
 
 - Backs up photos and videos to any SMB2/SMB3 NAS share
-- Runs automatically in the background via WorkManager
-- Only operates on Wi-Fi; skips if the NAS is unreachable
+- Runs automatically in the background via WorkManager and AlarmManager, including while the screen is locked
+- Only operates on Wi-Fi; retries automatically every 5 minutes if the NAS is unreachable
 - Incremental backups — skips files already on the NAS
 - SHA-256 verification of every transferred file (≤500 MB)
 - Preserves folder structure, original filenames, and original file modification dates on the NAS
@@ -92,7 +92,8 @@ No Hilt. `AppContainer` holds singleton instances and is created in `BackupAppli
 | SMBJ | 0.13.0 | SMB2/3 protocol for NAS communication |
 | BouncyCastle | 1.72 | Cryptography backend required by SMBJ |
 | Room | 2.6.1 | Local database for backup state and logs |
-| WorkManager | 2.10.0 | Background scheduling; survives Doze and reboots |
+| WorkManager | 2.10.0 | Background scheduling |
+| AlarmManager | (system) | Doze-safe scheduling; fires during maintenance windows when screen is off |
 | DataStore Preferences | 1.1.1 | Non-sensitive settings storage |
 | security-crypto | 1.1.0-alpha06 | Keystore-backed EncryptedSharedPreferences |
 | Jetpack Compose + Material3 | BOM 2024.12.01 | UI |
@@ -115,7 +116,7 @@ No Hilt. `AppContainer` holds singleton instances and is created in `BackupAppli
 5. Choose a **backup interval** (15 min / 1h / 6h / 12h / 24h) and optional charging-only requirement. The 15-minute option is the minimum enforced by Android's job scheduler and is intended for testing. Pressing Save always resets the timer from that moment.
 6. Optionally set **Keep backup logs** (how many backup sessions to retain in history).
 7. Optionally set **Skip Files Older Than** to ignore files before a specific date.
-8. Tap **Save**. A confirmation message appears briefly. The first scheduled backup runs automatically when on Wi-Fi.
+8. Tap **Save**. A confirmation message appears briefly. The timer starts from this moment — the first backup runs at the chosen interval, including while the screen is locked. If the NAS is unreachable when a backup is due, the app retries automatically every 5 minutes until it succeeds.
 
 Tap **Back Up Now** on the Status screen to trigger an immediate backup. While a backup is running, a **Stop Backup** button appears to cancel it immediately. The Status screen also shows when the next scheduled backup is due.
 
