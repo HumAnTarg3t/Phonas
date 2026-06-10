@@ -58,6 +58,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.documentfile.provider.DocumentFile
 import com.phonas.backup.R
+import com.phonas.backup.ui.formatNextBackupLabel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -303,10 +304,8 @@ fun SetupScreen(viewModel: SetupViewModel) {
 
         state.lastCompletedBackupMillis?.let { base ->
             val next = base + scheduleMinutes * 60_000L
-            val now = System.currentTimeMillis()
             Text(
-                if (next <= now) "Backup overdue — will run when on Wi-Fi"
-                else "Next scheduled backup: ${formatNextBackup(next)}",
+                formatNextBackupLabel(next, System.currentTimeMillis()),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -433,20 +432,3 @@ fun SetupScreen(viewModel: SetupViewModel) {
 private val dateFormatter = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
 private fun formatDate(epochMillis: Long): String = dateFormatter.format(Date(epochMillis))
 
-private fun formatNextBackup(epochMillis: Long): String {
-    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-    val cal = java.util.Calendar.getInstance().apply {
-        set(java.util.Calendar.HOUR_OF_DAY, 0)
-        set(java.util.Calendar.MINUTE, 0)
-        set(java.util.Calendar.SECOND, 0)
-        set(java.util.Calendar.MILLISECOND, 0)
-    }
-    val todayStart = cal.timeInMillis
-    val tomorrowStart = todayStart + 86_400_000L
-    val dayAfterStart = tomorrowStart + 86_400_000L
-    return when {
-        epochMillis < tomorrowStart -> "today at ${timeFormat.format(Date(epochMillis))}"
-        epochMillis < dayAfterStart -> "tomorrow at ${timeFormat.format(Date(epochMillis))}"
-        else -> SimpleDateFormat("EEE d MMM 'at' HH:mm", Locale.getDefault()).format(Date(epochMillis))
-    }
-}

@@ -40,11 +40,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.phonas.backup.R
 import com.phonas.backup.data.db.entity.BackupLogEntry
+import com.phonas.backup.ui.formatNextBackupLabel
 import com.phonas.backup.data.db.entity.LogStatus
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+
 
 @Composable
 fun StatusScreen(
@@ -101,15 +103,8 @@ fun StatusScreen(
         }
 
         state.nextBackupMillis?.let { next ->
-            val remaining = next - nowMs.longValue
-            val label = when {
-                remaining <= 0 -> "Next backup: soon"
-                remaining < 60_000L -> "Next backup: in less than a minute"
-                remaining < 3_600_000L -> "Next backup: in ${remaining / 60_000L} min"
-                else -> "Next backup: ${formatNextBackup(next)}"
-            }
             Text(
-                label,
+                formatNextBackupLabel(next, nowMs.longValue),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -260,22 +255,6 @@ private fun LastBackupCard(log: BackupLogEntry) {
     }
 }
 
-private fun formatNextBackup(epochMillis: Long): String {
-    val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-    val cal = java.util.Calendar.getInstance().apply {
-        set(java.util.Calendar.HOUR_OF_DAY, 0)
-        set(java.util.Calendar.MINUTE, 0)
-        set(java.util.Calendar.SECOND, 0)
-        set(java.util.Calendar.MILLISECOND, 0)
-    }
-    val tomorrowStart = cal.timeInMillis + 86_400_000L
-    val dayAfterStart = tomorrowStart + 86_400_000L
-    return when {
-        epochMillis < tomorrowStart -> "today at ${timeFormat.format(Date(epochMillis))}"
-        epochMillis < dayAfterStart -> "tomorrow at ${timeFormat.format(Date(epochMillis))}"
-        else -> SimpleDateFormat("EEE d MMM 'at' HH:mm", Locale.getDefault()).format(Date(epochMillis))
-    }
-}
 
 private val dateFormat = SimpleDateFormat("MMM d, yyyy HH:mm", Locale.getDefault())
 
