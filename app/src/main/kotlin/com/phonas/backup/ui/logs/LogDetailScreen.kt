@@ -1,5 +1,9 @@
 package com.phonas.backup.ui.logs
 
+import android.content.Intent
+import android.net.Uri
+import android.webkit.MimeTypeMap
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +15,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -25,6 +28,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.phonas.backup.data.db.entity.BackupSessionFile
@@ -35,10 +39,10 @@ fun LogDetailScreen(logId: Long, viewModel: LogsViewModel, onBack: () -> Unit) {
     LaunchedEffect(logId) { viewModel.loadLogDetail(logId) }
 
     val files by viewModel.selectedLogFiles.collectAsState()
-    val log = viewModel.logs.collectAsState().value.find { it.id == logId }
+    val log = viewModel.allLogs.collectAsState().value.find { it.id == logId }
+    val context = LocalContext.current
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -80,7 +84,21 @@ fun LogDetailScreen(logId: Long, viewModel: LogsViewModel, onBack: () -> Unit) {
             ) {
                 item { }
                 items(files, key = { it.id }) { file ->
-                    SessionFileRow(file)
+                    SessionFileRow(
+                        file = file,
+                        onTap = if (file.localUri != null) {
+                            {
+                                val uri = Uri.parse(file.localUri)
+                                val ext = file.filename.substringAfterLast('.', "").lowercase()
+                                val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(uri, mime)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                runCatching { context.startActivity(intent) }
+                            }
+                        } else null
+                    )
                 }
                 item { }
             }
@@ -89,7 +107,7 @@ fun LogDetailScreen(logId: Long, viewModel: LogsViewModel, onBack: () -> Unit) {
 }
 
 @Composable
-private fun SessionFileRow(file: BackupSessionFile) {
+private fun SessionFileRow(file: BackupSessionFile, onTap: (() -> Unit)?) {
     val chipColor = when (file.actionStatus) {
         SessionFileStatus.COPIED -> MaterialTheme.colorScheme.primaryContainer
         SessionFileStatus.SKIPPED -> MaterialTheme.colorScheme.surfaceVariant
@@ -104,6 +122,7 @@ private fun SessionFileRow(file: BackupSessionFile) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
             .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)

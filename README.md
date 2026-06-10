@@ -15,7 +15,7 @@ An Android app that automatically backs up photos and videos from your phone to 
 - **Scan all device media** — backs up every photo and video on the device (DCIM, WhatsApp, Screenshots, Downloads, etc.) without selecting folders manually
 - Optional per-folder NAS prefix to organise files under custom subdirectories
 - Optional date filter — only back up files modified on or after a chosen date
-- Clickable log entries showing per-file detail (copied / skipped / failed) for each backup session
+- Clickable log entries showing per-file detail (copied / skipped / failed) for each backup session, with status filter and tap-to-open on device
 - Configurable log retention (25 / 50 / 100 / 200 / 500 sessions)
 - Export and import the full configuration as a JSON file
 - Credentials stored with Android Keystore encryption (password excluded from exports)
@@ -135,13 +135,15 @@ The date filter is not a "since last backup" marker. It is a fixed cutoff that a
 
 ## Viewing Backup Details
 
-On the Logs screen, tap any backup session to see a full per-file breakdown:
+The Logs screen lists all backup sessions. Use the filter chips at the top to narrow the list to Completed, Failed, or Cancelled sessions.
+
+Tap any session to see a full per-file breakdown:
 
 - **Copied** — file was transferred and verified successfully
 - **Skipped** — file was already on the NAS, no transfer needed
 - **Failed** — transfer or verification failed (error message shown)
 
-The NAS path and file size are shown for each entry.
+The NAS path and file size are shown for each entry. Tap any row to open that file on the device in the default photo or video viewer. The tap target is only active for files backed up after updating to this version.
 
 ---
 

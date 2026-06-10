@@ -95,7 +95,8 @@ class BackupEngine(
                     db.backupSessionFileDao().insert(
                         BackupSessionFile(
                             logId = logId, filename = file.name, nasPath = remotePath,
-                            actionStatus = SessionFileStatus.SKIPPED, fileSize = file.size
+                            actionStatus = SessionFileStatus.SKIPPED, fileSize = file.size,
+                            localUri = file.uri.toString()
                         )
                     )
                 } else {
@@ -177,7 +178,8 @@ class BackupEngine(
                     db.backupSessionFileDao().insert(
                         BackupSessionFile(
                             logId = logId, filename = file.name, nasPath = remotePath,
-                            actionStatus = SessionFileStatus.COPIED, fileSize = file.size
+                            actionStatus = SessionFileStatus.COPIED, fileSize = file.size,
+                            localUri = file.uri.toString()
                         )
                     )
                     Pair(true, file.size)
@@ -218,7 +220,8 @@ class BackupEngine(
         db.backupSessionFileDao().insert(
             BackupSessionFile(
                 logId = logId, filename = file.name, nasPath = remotePath,
-                actionStatus = SessionFileStatus.FAILED, fileSize = file.size, errorMessage = error
+                actionStatus = SessionFileStatus.FAILED, fileSize = file.size, errorMessage = error,
+                localUri = file.uri.toString()
             )
         )
         return Pair(false, 0L)

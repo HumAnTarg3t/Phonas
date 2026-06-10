@@ -53,9 +53,15 @@ private val MIGRATION_1_2 = object : Migration(1, 2) {
     }
 }
 
+private val MIGRATION_2_3 = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `backup_session_files` ADD COLUMN `localUri` TEXT")
+    }
+}
+
 @Database(
     entities = [BackupFileRecord::class, BackupLogEntry::class, BackupSessionFile::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(AppTypeConverters::class)
@@ -72,7 +78,7 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "backup.db"
             )
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
         }
     }

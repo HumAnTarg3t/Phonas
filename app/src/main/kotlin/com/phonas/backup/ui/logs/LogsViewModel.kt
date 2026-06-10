@@ -6,19 +6,30 @@ import androidx.lifecycle.viewModelScope
 import com.phonas.backup.AppContainer
 import com.phonas.backup.data.db.entity.BackupLogEntry
 import com.phonas.backup.data.db.entity.BackupSessionFile
+import com.phonas.backup.data.db.entity.LogStatus
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class LogsViewModel(private val container: AppContainer) : ViewModel() {
 
-    val logs: StateFlow<List<BackupLogEntry>> = container.db.backupLogDao()
+    val filterStatus = MutableStateFlow<LogStatus?>(null)
+
+    val allLogs: StateFlow<List<BackupLogEntry>> = container.db.backupLogDao()
         .getAllLogs()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val filteredLogs: StateFlow<List<BackupLogEntry>> = combine(
+        container.db.backupLogDao().getAllLogs(),
+        filterStatus
+    ) { logs, filter ->
+        if (filter == null) logs else logs.filter { it.status == filter }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val _selectedLogFiles = MutableStateFlow<List<BackupSessionFile>>(emptyList())
     val selectedLogFiles: StateFlow<List<BackupSessionFile>> = _selectedLogFiles.asStateFlow()

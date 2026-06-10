@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,28 +31,59 @@ import java.util.concurrent.TimeUnit
 
 @Composable
 fun LogsScreen(viewModel: LogsViewModel, onLogClick: (Long) -> Unit = {}) {
-    val logs by viewModel.logs.collectAsState()
+    val logs by viewModel.filteredLogs.collectAsState()
+    val filter by viewModel.filterStatus.collectAsState()
 
-    if (logs.isEmpty()) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text(
-                text = stringResource(R.string.logs_empty),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = filter == null,
+                onClick = { viewModel.filterStatus.value = null },
+                label = { Text("All") }
+            )
+            FilterChip(
+                selected = filter == LogStatus.COMPLETED,
+                onClick = { viewModel.filterStatus.value = LogStatus.COMPLETED },
+                label = { Text("Completed") }
+            )
+            FilterChip(
+                selected = filter == LogStatus.FAILED,
+                onClick = { viewModel.filterStatus.value = LogStatus.FAILED },
+                label = { Text("Failed") }
+            )
+            FilterChip(
+                selected = filter == LogStatus.CANCELLED,
+                onClick = { viewModel.filterStatus.value = LogStatus.CANCELLED },
+                label = { Text("Cancelled") }
             )
         }
-    } else {
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item { }
-            items(logs, key = { it.id }) { log ->
-                LogEntryCard(log, onClick = { onLogClick(log.id) })
+
+        if (logs.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    text = if (filter == null) stringResource(R.string.logs_empty) else "No ${filter!!.name.lowercase()} backups",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
-            item { }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item { }
+                items(logs, key = { it.id }) { log ->
+                    LogEntryCard(log, onClick = { onLogClick(log.id) })
+                }
+                item { }
+            }
         }
     }
 }

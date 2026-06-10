@@ -24,5 +24,6 @@ data class BackupSessionFile(
     val nasPath: String,
     val actionStatus: SessionFileStatus,
     val fileSize: Long,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val localUri: String? = null
 )
