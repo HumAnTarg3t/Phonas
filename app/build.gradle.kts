@@ -56,6 +56,7 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.navigation.compose)
     implementation(libs.lifecycle.viewmodel.compose)
+    implementation(libs.lifecycle.runtime.compose)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
