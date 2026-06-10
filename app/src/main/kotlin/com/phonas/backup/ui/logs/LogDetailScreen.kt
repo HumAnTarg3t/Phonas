@@ -23,9 +23,13 @@ import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.FilterChip
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -40,6 +44,8 @@ fun LogDetailScreen(logId: Long, viewModel: LogsViewModel, onBack: () -> Unit) {
 
     val files by viewModel.selectedLogFiles.collectAsState()
     val log = viewModel.allLogs.collectAsState().value.find { it.id == logId }
+    var fileFilter by remember { mutableStateOf<SessionFileStatus?>(null) }
+    val visibleFiles = if (fileFilter == null) files else files.filter { it.actionStatus == fileFilter }
     val context = LocalContext.current
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -69,10 +75,23 @@ fun LogDetailScreen(logId: Long, viewModel: LogsViewModel, onBack: () -> Unit) {
         }
         HorizontalDivider()
 
-        if (files.isEmpty()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(selected = fileFilter == null, onClick = { fileFilter = null }, label = { Text("All") })
+            FilterChip(selected = fileFilter == SessionFileStatus.COPIED, onClick = { fileFilter = SessionFileStatus.COPIED }, label = { Text("Copied") })
+            FilterChip(selected = fileFilter == SessionFileStatus.SKIPPED, onClick = { fileFilter = SessionFileStatus.SKIPPED }, label = { Text("Skipped") })
+            FilterChip(selected = fileFilter == SessionFileStatus.FAILED, onClick = { fileFilter = SessionFileStatus.FAILED }, label = { Text("Failed") })
+        }
+
+        if (visibleFiles.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
-                    text = "No file details available for this session",
+                    text = if (fileFilter == null) "No file details available for this session"
+                           else "No ${fileFilter!!.name.lowercase()} files in this session",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -83,7 +102,7 @@ fun LogDetailScreen(logId: Long, viewModel: LogsViewModel, onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 item { }
-                items(files, key = { it.id }) { file ->
+                items(visibleFiles, key = { it.id }) { file ->
                     SessionFileRow(
                         file = file,
                         onTap = if (file.localUri != null) {
