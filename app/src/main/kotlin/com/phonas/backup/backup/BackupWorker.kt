@@ -34,10 +34,12 @@ class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         }
 
         if (!isOnWifi()) {
+            AlarmScheduler.schedule(applicationContext, System.currentTimeMillis() + RETRY_INTERVAL_MS)
             return Result.retry()
         }
 
         if (!isNasReachable(credentials.nasHost)) {
+            AlarmScheduler.schedule(applicationContext, System.currentTimeMillis() + RETRY_INTERVAL_MS)
             return Result.retry()
         }
 
@@ -62,7 +64,10 @@ class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
         return when (container.backupEngine.runBackup(settings, nasCredentials)) {
             is BackupResult.Success -> Result.success()
-            is BackupResult.Failure -> Result.retry()
+            is BackupResult.Failure -> {
+                AlarmScheduler.schedule(applicationContext, System.currentTimeMillis() + RETRY_INTERVAL_MS)
+                Result.retry()
+            }
         }
     }
 
@@ -117,6 +122,8 @@ class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     companion object {
         const val CHANNEL_ID = "backup_progress"
         const val NOTIFICATION_ID = 1001
+
+        private const val RETRY_INTERVAL_MS = 5 * 60 * 1000L
 
         const val KEY_CURRENT_FILE = "current_file"
         const val KEY_FILES_DONE = "files_done"

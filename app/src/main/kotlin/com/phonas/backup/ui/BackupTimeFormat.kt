@@ -8,7 +8,7 @@ import java.util.Locale
 fun formatNextBackupLabel(nextMs: Long, nowMs: Long): String {
     val remaining = nextMs - nowMs
     return when {
-        remaining <= 0 -> "Backup overdue — will run when on Wi-Fi"
+        remaining <= 0 -> "Backup overdue — will run soon"
         remaining < 60_000L -> "Next backup: in less than a minute"
         remaining < 3_600_000L -> "Next backup: in ${remaining / 60_000L} min"
         else -> "Next backup: ${formatNextBackupTime(nextMs)}"

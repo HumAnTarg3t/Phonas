@@ -113,6 +113,7 @@ class BackupEngine(
             val endTime = System.currentTimeMillis()
             db.backupLogDao().updateCompleted(logId, endTime, filesCopied, filesSkipped, filesFailed, bytesTransferred)
             db.backupLogDao().deleteOldLogs(settings.maxLogEntries)
+            AlarmScheduler.schedule(context, endTime + settings.scheduleIntervalMinutes * 60_000L)
             BackupResult.Success(filesCopied, filesSkipped, filesFailed, bytesTransferred)
         } catch (e: kotlinx.coroutines.CancellationException) {
             withContext(NonCancellable) {

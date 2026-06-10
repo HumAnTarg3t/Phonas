@@ -36,6 +36,7 @@ object WorkScheduler {
             ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
             request
         )
+        AlarmScheduler.schedule(context, System.currentTimeMillis() + intervalMinutes * 60_000L)
     }
 
     fun runNow(context: Context, settings: AppSettings) {
