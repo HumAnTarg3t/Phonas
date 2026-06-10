@@ -33,6 +33,6 @@ Do not soften the challenge with excessive hedging. One clear sentence is enough
 
 ---
 
-### Documentation
+## Documentation
 
 Always create or update the documentation when its something the user should know about.

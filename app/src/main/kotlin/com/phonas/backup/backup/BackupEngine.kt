@@ -17,7 +17,10 @@ import com.phonas.backup.data.smb.SmbClient
 
 import java.security.DigestInputStream
 import java.security.MessageDigest
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 data class NasCredentials(
@@ -75,6 +78,7 @@ class BackupEngine(
             val bytesTotal = allFiles.sumOf { it.file.size }
 
             allFiles.forEachIndexed { index, (file, prefix) ->
+                currentCoroutineContext().ensureActive()
                 progressCallback?.invoke(
                     BackupProgress(
                         currentFile = file.name,
@@ -183,6 +187,8 @@ class BackupEngine(
                     markFailed(file, remotePath, "Verification failed: hash mismatch", logId)
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             runCatching { smbClient.deleteFile(remotePath) }
             markFailed(file, remotePath, sanitizeError(e.message), logId)

@@ -22,7 +22,7 @@ object WorkScheduler {
         val constraints = buildConstraints(settings)
 
         val intervalMinutes = settings.scheduleIntervalMinutes.toLong()
-        val flexMinutes = minOf(15L, intervalMinutes)
+        val flexMinutes = 5L
         val request = PeriodicWorkRequestBuilder<BackupWorker>(
             intervalMinutes, TimeUnit.MINUTES,
             flexMinutes, TimeUnit.MINUTES
