@@ -77,8 +77,8 @@ class StatusViewModel(
             container.db.backupLogDao().getLastCompletedLogFlow(),
             container.settingsStore.settings
         ) { lastCompleted, settings ->
-            val base = lastCompleted?.endTime ?: lastCompleted?.startTime
-            if (base != null) base + settings.scheduleIntervalMinutes * 60_000L else null
+            val base = lastCompleted?.endTime ?: lastCompleted?.startTime ?: System.currentTimeMillis()
+            base + settings.scheduleIntervalMinutes * 60_000L
         }.onEach { nextMillis ->
             _uiState.update { it.copy(nextBackupMillis = nextMillis) }
         }.launchIn(viewModelScope)
