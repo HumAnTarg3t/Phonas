@@ -2,6 +2,8 @@ package com.phonas.backup.ui.setup
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -37,7 +39,8 @@ data class SetupUiState(
     val isTesting: Boolean = false,
     val isSaved: Boolean = false,
     val importExportMessage: String? = null,
-    val lastCompletedBackupMillis: Long? = null
+    val lastCompletedBackupMillis: Long? = null,
+    val allFilesAccessGranted: Boolean = false
 )
 
 sealed class TestConnectionResult {
@@ -103,6 +106,12 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
 
     fun setScanAllMedia(enabled: Boolean) {
         _uiState.update { it.copy(scanAllMedia = enabled) }
+    }
+
+    /** Re-check All Files Access (grant happens in system Settings, so poll on resume). */
+    fun refreshAllFilesAccess() {
+        val granted = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()
+        _uiState.update { it.copy(allFilesAccessGranted = granted) }
     }
 
     fun onMediaPermissionDenied() {

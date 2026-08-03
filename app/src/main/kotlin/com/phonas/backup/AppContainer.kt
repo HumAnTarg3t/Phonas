@@ -1,6 +1,7 @@
 package com.phonas.backup
 
 import android.content.Context
+import com.phonas.backup.backup.AllFilesScanner
 import com.phonas.backup.backup.BackupEngine
 import com.phonas.backup.backup.DuplicateDetector
 import com.phonas.backup.backup.FileScanner
@@ -18,7 +19,10 @@ class AppContainer(context: Context) {
     val fileVerifier = FileVerifier(context)
     val fileScanner = FileScanner(context)
     val mediaStoreScanner = MediaStoreScanner(context)
+    val allFilesScanner = AllFilesScanner(context)
     val duplicateDetector = DuplicateDetector(db, fileVerifier)
     // BackupEngine constructs a fresh SmbClient per run via its default factory.
-    val backupEngine = BackupEngine(context, db, fileScanner, mediaStoreScanner, duplicateDetector, fileVerifier)
+    val backupEngine = BackupEngine(
+        context, db, fileScanner, mediaStoreScanner, allFilesScanner, duplicateDetector, fileVerifier
+    )
 }

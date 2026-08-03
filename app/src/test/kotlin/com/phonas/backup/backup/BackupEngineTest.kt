@@ -32,6 +32,7 @@ class BackupEngineTest {
     private lateinit var smbClient: SmbClient
     private lateinit var fileScanner: FileScanner
     private lateinit var mediaStoreScanner: MediaStoreScanner
+    private lateinit var allFilesScanner: AllFilesScanner
     private lateinit var duplicateDetector: DuplicateDetector
     private lateinit var fileVerifier: FileVerifier
     private lateinit var engine: BackupEngine
@@ -49,6 +50,7 @@ class BackupEngineTest {
         smbClient = mock()
         fileScanner = mock()
         mediaStoreScanner = mock()
+        allFilesScanner = mock()
         duplicateDetector = mock()
         fileVerifier = mock()
 
@@ -58,7 +60,7 @@ class BackupEngineTest {
         runBlocking { whenever(logDao.insert(any())).thenReturn(1L) }
 
         engine = BackupEngine(
-            context, db, fileScanner, mediaStoreScanner, duplicateDetector, fileVerifier,
+            context, db, fileScanner, mediaStoreScanner, allFilesScanner, duplicateDetector, fileVerifier,
             smbClientFactory = { smbClient }
         )
     }

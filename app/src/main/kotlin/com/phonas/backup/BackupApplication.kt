@@ -1,6 +1,7 @@
 package com.phonas.backup
 
 import android.app.Application
+import com.phonas.backup.backup.MediaChangeObserver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -31,6 +32,11 @@ class BackupApplication : Application() {
             val now = System.currentTimeMillis()
             container.db.backupLogDao().cancelStaleRunning(cutoff = now - MAX_BACKUP_RUNTIME_MS, now = now)
         }
+
+        // Low-latency trigger: back up shortly after new media is indexed (debounced).
+        MediaChangeObserver(
+            this, applicationScope, container.credentialStore, container.settingsStore
+        ).register()
     }
 
     companion object {

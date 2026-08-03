@@ -1,9 +1,12 @@
 package com.phonas.backup.ui.setup
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -43,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -52,6 +56,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -99,6 +106,16 @@ fun SetupScreen(viewModel: SetupViewModel) {
     ) { grants ->
         if (grants.values.all { it }) viewModel.setScanAllMedia(true)
         else viewModel.onMediaPermissionDenied()
+    }
+
+    // All Files Access is granted in system Settings, so re-check on every resume.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshAllFilesAccess()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(state.isSaved) {
@@ -218,6 +235,11 @@ fun SetupScreen(viewModel: SetupViewModel) {
                         viewModel.setScanAllMedia(false)
                         return@Switch
                     }
+                    // All Files Access already gives complete coverage — enable directly.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
+                        viewModel.setScanAllMedia(true)
+                        return@Switch
+                    }
                     val perms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO)
                     } else {
@@ -230,6 +252,44 @@ fun SetupScreen(viewModel: SetupViewModel) {
                     else mediaPermissionLauncher.launch(perms)
                 }
             )
+        }
+
+        // Full coverage (WhatsApp group media and other .nomedia-hidden files) needs All Files
+        // Access. Prompt for it while scan-all is on and the grant is missing (Android 11+).
+        if (state.scanAllMedia
+            && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+            && !state.allFilesAccessGranted
+        ) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Grant All Files Access for full coverage", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Without it, media hidden from the gallery — such as WhatsApp group-chat " +
+                            "images when \"Media visibility\" is off — will not be backed up.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            val intent = runCatching {
+                                Intent(
+                                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                            }.getOrElse { Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION) }
+                            runCatching { context.startActivity(intent) }
+                                .onFailure {
+                                    runCatching {
+                                        context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                                    }
+                                }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Grant All Files Access")
+                    }
+                }
+            }
         }
 
         if (!state.scanAllMedia) {

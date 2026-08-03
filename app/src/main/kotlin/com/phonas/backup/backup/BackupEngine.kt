@@ -36,6 +36,7 @@ class BackupEngine(
     private val db: AppDatabase,
     private val fileScanner: FileScanner,
     private val mediaStoreScanner: MediaStoreScanner,
+    private val allFilesScanner: AllFilesScanner,
     private val duplicateDetector: DuplicateDetector,
     private val fileVerifier: FileVerifier,
     // A fresh SmbClient per run avoids two overlapping backups sharing (and tearing down)
@@ -85,15 +86,22 @@ class BackupEngine(
             data class IndexedFile(val file: MediaFile, val prefix: String)
 
             val allFiles = mutableListOf<IndexedFile>()
+            val since = settings.sinceDateMillis
             if (settings.scanAllMedia) {
-                mediaStoreScanner.scanAll()
-                    .filter { settings.sinceDateMillis == null || it.lastModified >= settings.sinceDateMillis }
+                // MediaStore first (content:// URIs are stable for tap-to-open), then the
+                // filesystem walk that catches .nomedia-hidden media (WhatsApp group chats).
+                // Dedupe on stable identity so a file found by both sources is uploaded once.
+                val merged = LinkedHashMap<String, MediaFile>()
+                for (f in mediaStoreScanner.scanAll()) merged.putIfAbsent(f.identityKey, f)
+                for (f in allFilesScanner.scan()) merged.putIfAbsent(f.identityKey, f)
+                merged.values
+                    .filter { since == null || it.effectiveDate >= since }
                     .forEach { allFiles.add(IndexedFile(it, "")) }
             } else {
                 for (entry in settings.monitoredFolders) {
                     val folderUri = Uri.parse(entry.uri)
                     fileScanner.scan(folderUri)
-                        .filter { settings.sinceDateMillis == null || it.lastModified >= settings.sinceDateMillis }
+                        .filter { since == null || it.effectiveDate >= since }
                         .forEach { allFiles.add(IndexedFile(it, entry.prefix)) }
                 }
             }
