@@ -15,6 +15,7 @@ import com.phonas.backup.data.db.entity.SessionFileStatus
 import com.phonas.backup.data.prefs.AppSettings
 import com.phonas.backup.data.smb.SmbClient
 
+import androidx.room.withTransaction
 import java.security.DigestInputStream
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
@@ -207,14 +208,10 @@ class BackupEngine(
     }
 
     private suspend fun recordSuccess(file: MediaFile, remotePath: String, localHash: String, logId: Long) {
-        db.backupFileDao().markSuccess(
-            uri = file.uri.toString(),
-            nasPath = remotePath,
-            sha256 = localHash,
-            backedUpAt = System.currentTimeMillis()
-        )
-        // markSuccess only updates an existing row; insert one if this is the first backup.
-        if (db.backupFileDao().findByUri(file.uri.toString()) == null) {
+        // Atomic: one fully-populated row per physical file (drop any prior record — possibly under
+        // a different URI from a previous source — before inserting), plus the session detail row.
+        db.withTransaction {
+            db.backupFileDao().deleteByRelativePathAndName(file.relativePath, file.name)
             db.backupFileDao().upsert(
                 BackupFileRecord(
                     localUri = file.uri.toString(),
@@ -229,14 +226,14 @@ class BackupEngine(
                     errorMessage = null
                 )
             )
-        }
-        db.backupSessionFileDao().insert(
-            BackupSessionFile(
-                logId = logId, filename = file.name, nasPath = remotePath,
-                actionStatus = SessionFileStatus.COPIED, fileSize = file.size,
-                localUri = file.uri.toString()
+            db.backupSessionFileDao().insert(
+                BackupSessionFile(
+                    logId = logId, filename = file.name, nasPath = remotePath,
+                    actionStatus = SessionFileStatus.COPIED, fileSize = file.size,
+                    localUri = file.uri.toString()
+                )
             )
-        )
+        }
     }
 
     private suspend fun markFailed(file: MediaFile, remotePath: String, error: String, logId: Long): Pair<Boolean, Long> {

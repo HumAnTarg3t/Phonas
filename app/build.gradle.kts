@@ -41,6 +41,16 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // Ship the exported Room schemas as androidTest assets so MigrationTestHelper can use them.
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+}
+
+// Export Room schemas (required by exportSchema = true) for migration tests and history.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {

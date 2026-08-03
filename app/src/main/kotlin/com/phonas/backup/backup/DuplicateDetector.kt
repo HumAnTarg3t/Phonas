@@ -11,14 +11,18 @@ class DuplicateDetector(
     private val fileVerifier: FileVerifier
 ) {
     suspend fun shouldSkip(file: MediaFile, smbClient: SmbClient, remotePath: String): Boolean {
-        var record = db.backupFileDao().findByUri(file.uri.toString())
+        val currentUri = file.uri.toString()
+        var record = db.backupFileDao().findByUri(currentUri)
 
-        // MediaStore IDs can change on reindex; fall back to stable path+name lookup
+        // MediaStore IDs change on reindex and the same file has different URIs across sources
+        // (content:// vs file://), so fall back to the stable path+name identity.
         if (record == null) {
-            record = db.backupFileDao().findByRelativePathAndName(file.relativePath, file.name)
-            if (record != null) {
-                // Self-heal: store the new URI for future fast-path hits
-                db.backupFileDao().upsert(record.copy(localUri = file.uri.toString()))
+            val healed = db.backupFileDao().findByRelativePathAndName(file.relativePath, file.name)
+            if (healed != null) {
+                // Self-heal in place (no orphan row) and reflect the new key in memory so the
+                // upsert below updates this same row rather than resurrecting the old URI.
+                db.backupFileDao().updateLocalUri(healed.localUri, currentUri)
+                record = healed.copy(localUri = currentUri)
             }
         }
 

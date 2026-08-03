@@ -24,6 +24,14 @@ interface BackupFileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(record: BackupFileRecord)
 
+    /** Move a record to a new localUri (the primary key) in place — no orphan row left behind. */
+    @Query("UPDATE backup_files SET localUri = :newUri WHERE localUri = :oldUri")
+    suspend fun updateLocalUri(oldUri: String, newUri: String)
+
+    /** Remove any prior record(s) for the same physical file before writing a fresh one. */
+    @Query("DELETE FROM backup_files WHERE relativePath = :path AND filename = :filename")
+    suspend fun deleteByRelativePathAndName(path: String, filename: String)
+
     @Query(
         """
         UPDATE backup_files
