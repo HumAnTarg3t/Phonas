@@ -44,12 +44,18 @@ class CredentialStore(context: Context) {
 
     fun save(host: String, share: String, user: String, pass: String) {
         prefs.edit()
-            .putString(KEY_HOST, host)
-            .putString(KEY_SHARE, share)
-            .putString(KEY_USERNAME, user)
-            .putString(KEY_PASSWORD, pass)
+            .putString(KEY_HOST, normalizeHost(host))
+            .putString(KEY_SHARE, normalizeShare(share))
+            .putString(KEY_USERNAME, user.trim())
+            .putString(KEY_PASSWORD, pass)  // never trim the password
             .apply()
     }
+
+    private fun normalizeHost(raw: String): String =
+        raw.trim().removePrefix("smb://").trimStart('\\', '/').trimEnd('\\', '/')
+
+    private fun normalizeShare(raw: String): String =
+        raw.trim().trim('\\', '/')
 
     companion object {
         private const val KEY_HOST = "nas_host"

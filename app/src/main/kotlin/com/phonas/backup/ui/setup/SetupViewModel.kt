@@ -56,12 +56,18 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
     init {
         viewModelScope.launch {
             val settings = container.settingsStore.settings.first()
+            data class Creds(val host: String, val share: String, val user: String, val hasPass: Boolean)
+            // EncryptedSharedPreferences reads touch disk + Keystore — keep them off the UI thread.
+            val creds = withContext(Dispatchers.IO) {
+                val cs = container.credentialStore
+                Creds(cs.nasHost, cs.nasShare, cs.username, cs.password.isNotBlank())
+            }
             _uiState.update {
                 it.copy(
-                    nasHost = container.credentialStore.nasHost,
-                    nasShare = container.credentialStore.nasShare,
-                    username = container.credentialStore.username,
-                    hasExistingPassword = container.credentialStore.password.isNotBlank(),
+                    nasHost = creds.host,
+                    nasShare = creds.share,
+                    username = creds.user,
+                    hasExistingPassword = creds.hasPass,
                     scheduleIntervalMinutes = settings.scheduleIntervalMinutes,
                     requireCharging = settings.requireCharging,
                     monitoredFolders = settings.monitoredFolders,
@@ -101,7 +107,10 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun setSinceDate(millis: Long?) {
-        _uiState.update { it.copy(sinceDateMillis = millis) }
+        // A future cutoff would silently suppress all backups; clamp so imported/picked dates
+        // can never exceed now.
+        val clamped = millis?.coerceAtMost(System.currentTimeMillis())
+        _uiState.update { it.copy(sinceDateMillis = clamped) }
     }
 
     fun setScanAllMedia(enabled: Boolean) {
@@ -115,9 +124,12 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun onMediaPermissionDenied() {
+        // A partial photo grant (Android 14 "Select photos") also lands here: it is insufficient
+        // for a complete backup, so keep scan-all off and steer the user to full / All Files Access.
         _uiState.update { it.copy(
             scanAllMedia = false,
-            importExportMessage = "Storage permission is required to scan all device media"
+            importExportMessage = "Full media access is required to scan all device media. " +
+                "Grant \"Allow all\" (or All Files Access) rather than a limited selection."
         ) }
     }
 
@@ -131,7 +143,7 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
         requireCharging: Boolean,
         maxLogEntries: Int
     ) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 val actualPassword = if (password.isBlank()) container.credentialStore.password else password
                 container.credentialStore.save(host, share, username, actualPassword)
@@ -191,9 +203,9 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
                     }
                     put("monitoredFolders", foldersArr)
                 }
-                context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use {
-                    it.write(json.toString(2))
-                }
+                val output = context.contentResolver.openOutputStream(uri)
+                    ?: error("Cannot open file for writing")
+                output.bufferedWriter().use { it.write(json.toString(2)) }
                 _uiState.update { it.copy(importExportMessage = "Configuration exported") }
             }.onFailure { e ->
                 _uiState.update { it.copy(importExportMessage = "Export failed: ${e.message}") }
@@ -283,9 +295,13 @@ class SetupViewModel(private val container: AppContainer) : ViewModel() {
             val result = withContext(Dispatchers.IO) {
                 val smb = SmbClient()
                 runCatching {
-                    smb.connect(host, username, password, share)
-                    smb.disconnect()
-                    TestConnectionResult.Success
+                    try {
+                        smb.connect(host, username, password, share)
+                        TestConnectionResult.Success
+                    } finally {
+                        // Always release the connection, even if connect() threw partway through.
+                        smb.disconnect()
+                    }
                 }.getOrElse {
                     TestConnectionResult.Failure(sanitize(it.message))
                 }

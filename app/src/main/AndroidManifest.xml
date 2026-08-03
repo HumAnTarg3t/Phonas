@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- Android 14+ partial-photo-access model; a partial grant is insufficient for a full
+         backup, so the app steers the user to full or All Files Access instead. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <!-- All Files Access: the only way to reach media MediaStore refuses to index (folders with
          a .nomedia file, e.g. WhatsApp group chats with media visibility off). Sideload-only;

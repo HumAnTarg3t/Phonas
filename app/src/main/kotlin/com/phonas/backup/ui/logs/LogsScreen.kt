@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -43,22 +44,22 @@ fun LogsScreen(viewModel: LogsViewModel, onLogClick: (Long) -> Unit = {}) {
         ) {
             FilterChip(
                 selected = filter == null,
-                onClick = { viewModel.filterStatus.value = null },
+                onClick = { viewModel.setFilter(null) },
                 label = { Text("All") }
             )
             FilterChip(
                 selected = filter == LogStatus.COMPLETED,
-                onClick = { viewModel.filterStatus.value = LogStatus.COMPLETED },
+                onClick = { viewModel.setFilter(LogStatus.COMPLETED) },
                 label = { Text("Completed") }
             )
             FilterChip(
                 selected = filter == LogStatus.FAILED,
-                onClick = { viewModel.filterStatus.value = LogStatus.FAILED },
+                onClick = { viewModel.setFilter(LogStatus.FAILED) },
                 label = { Text("Failed") }
             )
             FilterChip(
                 selected = filter == LogStatus.CANCELLED,
-                onClick = { viewModel.filterStatus.value = LogStatus.CANCELLED },
+                onClick = { viewModel.setFilter(LogStatus.CANCELLED) },
                 label = { Text("Cancelled") }
             )
         }
@@ -76,13 +77,12 @@ fun LogsScreen(viewModel: LogsViewModel, onLogClick: (Long) -> Unit = {}) {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                item { }
                 items(logs, key = { it.id }) { log ->
                     LogEntryCard(log, onClick = { onLogClick(log.id) })
                 }
-                item { }
             }
         }
     }

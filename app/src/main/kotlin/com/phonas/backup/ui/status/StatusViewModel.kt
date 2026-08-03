@@ -12,6 +12,7 @@ import com.phonas.backup.backup.BackupWorker
 import com.phonas.backup.backup.WorkScheduler
 import com.phonas.backup.backup.model.BackupProgress
 import com.phonas.backup.data.db.entity.BackupLogEntry
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,7 +46,7 @@ class StatusViewModel(
     val uiState: StateFlow<StatusUiState> = _uiState.asStateFlow()
 
     init {
-        _uiState.update { it.copy(isConfigured = container.credentialStore.isConfigured()) }
+        refreshConfigured()
 
         // Observe latest log
         container.db.backupLogDao().getAllLogs()
@@ -61,13 +62,20 @@ class StatusViewModel(
         combine(periodicFlow, immediateFlow) { periodic, immediate ->
             val immediateInfo = immediate.firstOrNull()
             val periodicInfo = periodic.firstOrNull()
-            // Immediate work takes precedence; only it can show WAITING_WIFI
-            if (immediateInfo != null && (immediateInfo.state == WorkInfo.State.RUNNING
-                    || immediateInfo.state == WorkInfo.State.ENQUEUED
-                    || immediateInfo.state == WorkInfo.State.BLOCKED)) {
-                resolveStatus(immediateInfo, isImmediate = true)
-            } else {
-                resolveStatus(periodicInfo, isImmediate = false)
+            val immediateState = immediateInfo?.state
+            val immediateActive = immediateState == WorkInfo.State.RUNNING ||
+                immediateState == WorkInfo.State.ENQUEUED ||
+                immediateState == WorkInfo.State.BLOCKED
+            val immediateTerminal = immediateState == WorkInfo.State.SUCCEEDED ||
+                immediateState == WorkInfo.State.FAILED
+            // Immediate work takes precedence while active; its terminal result is also surfaced
+            // (previously it fell through to periodic and was never shown) unless a periodic run
+            // is currently in progress.
+            when {
+                immediateActive -> resolveStatus(immediateInfo, isImmediate = true)
+                immediateTerminal && periodicInfo?.state != WorkInfo.State.RUNNING ->
+                    resolveStatus(immediateInfo, isImmediate = true)
+                else -> resolveStatus(periodicInfo, isImmediate = false)
             }
         }.onEach { (status, progress) ->
             _uiState.update { it.copy(status = status, progress = progress) }
@@ -96,7 +104,11 @@ class StatusViewModel(
     }
 
     fun refreshConfigured() {
-        _uiState.update { it.copy(isConfigured = container.credentialStore.isConfigured()) }
+        // Credential reads hit EncryptedSharedPreferences (disk + Keystore) — keep them off the UI thread.
+        viewModelScope.launch(Dispatchers.IO) {
+            val configured = container.credentialStore.isConfigured()
+            _uiState.update { it.copy(isConfigured = configured) }
+        }
     }
 
     fun refreshBatteryOptimization(context: Context) {
