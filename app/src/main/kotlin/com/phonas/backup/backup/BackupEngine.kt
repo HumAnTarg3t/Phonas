@@ -48,6 +48,10 @@ class BackupEngine(
     // skipped rather than run concurrently, which previously corrupted the shared connection.
     private val mutex = Mutex()
 
+    // Credential substrings scrubbed from any raw error text that reaches logs/DB. Set per run;
+    // safe as shared mutable state because runBackup is serialized by the mutex above.
+    private var redactTerms: List<String> = emptyList()
+
     suspend fun runBackup(
         settings: AppSettings,
         credentials: NasCredentials,
@@ -67,6 +71,7 @@ class BackupEngine(
         progressCallback: (suspend (BackupProgress) -> Unit)?
     ): BackupResult {
         val smbClient = smbClientFactory()
+        redactTerms = listOf(credentials.host, credentials.share, credentials.username)
         val logId = db.backupLogDao().insert(
             BackupLogEntry(startTime = System.currentTimeMillis(), status = LogStatus.RUNNING)
         )
@@ -154,9 +159,10 @@ class BackupEngine(
             }
             throw e
         } catch (e: Exception) {
-            db.backupLogDao().updateFailed(logId, System.currentTimeMillis(), sanitizeError(e.message))
+            val error = sanitizeError(e)
+            db.backupLogDao().updateFailed(logId, System.currentTimeMillis(), error)
             db.backupLogDao().deleteOldLogs(settings.maxLogEntries)
-            BackupResult.Failure(sanitizeError(e.message))
+            BackupResult.Failure(error)
         } finally {
             smbClient.disconnect()
         }
@@ -203,7 +209,7 @@ class BackupEngine(
             throw e
         } catch (e: Exception) {
             runCatching { smbClient.deleteFile(tempPath) }
-            markFailed(file, remotePath, sanitizeError(e.message), logId)
+            markFailed(file, remotePath, sanitizeError(e), logId)
         }
     }
 
@@ -275,48 +281,39 @@ class BackupEngine(
         parts.add(file.name)
         // ensureDirectory() derives directory segments from this same string, so sanitizing here
         // keeps file and directory paths consistent.
-        return parts.joinToString("\\") { sanitizePathComponent(it) }
+        return parts.joinToString("\\") { RemotePath.sanitizeComponent(it) }
     }
 
-    /** Make one path segment safe for SMB/NTFS: strip illegal chars, trailing dots/spaces,
-     *  reserved device names, and cap length while preserving the extension. */
-    private fun sanitizePathComponent(raw: String): String {
-        val cleaned = buildString {
-            for (c in raw) append(if (c.code < 0x20 || c in ILLEGAL_PATH_CHARS) '_' else c)
-        }.trimEnd(' ', '.')
-
-        val safe = cleaned.ifEmpty { "_" }
-        val base = safe.substringBeforeLast('.', safe)
-        if (base.uppercase() in RESERVED_NAMES) return "_$safe"
-
-        if (safe.length <= MAX_COMPONENT_LEN) return safe
-        // Too long: truncate the base but keep the extension.
-        val ext = safe.substringAfterLast('.', "")
-        return if (ext.isNotEmpty() && ext.length < MAX_COMPONENT_LEN - 1) {
-            safe.substring(0, MAX_COMPONENT_LEN - ext.length - 1) + "." + ext
-        } else {
-            safe.substring(0, MAX_COMPONENT_LEN)
+    /**
+     * Map a failure to a fixed, user-facing category (never persisting raw provider strings that
+     * could contain the host/username), scrubbing configured credentials as a backstop for the
+     * uncategorised case. Walks the cause chain so a wrapped exception is still classified.
+     */
+    private fun sanitizeError(e: Throwable): String {
+        val combined = generateSequence(e as Throwable?) { it.cause }
+            .mapNotNull { it.message }
+            .joinToString(" | ")
+            .lowercase()
+        return when {
+            combined.isBlank() -> "Unknown error"
+            listOf("auth", "password", "credential", "logon", "access is denied", "access_denied")
+                .any { it in combined } -> "Authentication or access denied"
+            listOf("unknownhost", "no route", "unreachable", "timed out", "timeout", "connection", "socket")
+                .any { it in combined } -> "Network error — NAS unreachable"
+            "space" in combined || "quota" in combined || "disk full" in combined -> "NAS out of space"
+            listOf("no such", "not found", "cannot find", "does not exist")
+                .any { it in combined } -> "Path or share not found"
+            else -> scrubCredentials(combined)
         }
     }
 
-    private fun sanitizeError(message: String?): String {
-        return message?.let {
-            if (it.contains("password", ignoreCase = true)
-                || it.contains("credential", ignoreCase = true)
-                || it.contains("auth", ignoreCase = true)
-            ) "Authentication error" else it
-        } ?: "Unknown error"
+    private fun scrubCredentials(message: String): String {
+        var scrubbed = message
+        for (term in redactTerms) {
+            if (term.isNotBlank()) scrubbed = scrubbed.replace(term.lowercase(), "***")
+        }
+        return scrubbed
     }
 
     private fun ByteArray.toHexString(): String = joinToString("") { "%02x".format(it) }
-
-    companion object {
-        private val ILLEGAL_PATH_CHARS = charArrayOf('\\', '/', ':', '*', '?', '"', '<', '>', '|').toSet()
-        private val RESERVED_NAMES = setOf(
-            "CON", "PRN", "AUX", "NUL",
-            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
-        )
-        private const val MAX_COMPONENT_LEN = 255
-    }
 }
