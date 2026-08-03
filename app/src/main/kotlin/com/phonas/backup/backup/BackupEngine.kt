@@ -21,6 +21,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 
 data class NasCredentials(
@@ -33,15 +34,37 @@ data class NasCredentials(
 class BackupEngine(
     private val context: Context,
     private val db: AppDatabase,
-    private val smbClient: SmbClient,
     private val fileScanner: FileScanner,
     private val mediaStoreScanner: MediaStoreScanner,
     private val duplicateDetector: DuplicateDetector,
-    private val fileVerifier: FileVerifier
+    private val fileVerifier: FileVerifier,
+    // A fresh SmbClient per run avoids two overlapping backups sharing (and tearing down)
+    // one connection. Injectable so tests can supply a mock.
+    private val smbClientFactory: () -> SmbClient = { SmbClient() }
 ) {
-    var progressCallback: (suspend (BackupProgress) -> Unit)? = null
+    // Serializes backups: a second trigger (e.g. "Back Up Now" during a scheduled run) is
+    // skipped rather than run concurrently, which previously corrupted the shared connection.
+    private val mutex = Mutex()
 
-    suspend fun runBackup(settings: AppSettings, credentials: NasCredentials): BackupResult {
+    suspend fun runBackup(
+        settings: AppSettings,
+        credentials: NasCredentials,
+        progressCallback: (suspend (BackupProgress) -> Unit)? = null
+    ): BackupResult {
+        if (!mutex.tryLock()) return BackupResult.AlreadyRunning
+        try {
+            return runBackupLocked(settings, credentials, progressCallback)
+        } finally {
+            mutex.unlock()
+        }
+    }
+
+    private suspend fun runBackupLocked(
+        settings: AppSettings,
+        credentials: NasCredentials,
+        progressCallback: (suspend (BackupProgress) -> Unit)?
+    ): BackupResult {
+        val smbClient = smbClientFactory()
         val logId = db.backupLogDao().insert(
             BackupLogEntry(startTime = System.currentTimeMillis(), status = LogStatus.RUNNING)
         )
@@ -100,7 +123,7 @@ class BackupEngine(
                         )
                     )
                 } else {
-                    val (success, bytes) = transferAndVerify(file, remotePath, logId)
+                    val (success, bytes) = transferAndVerify(smbClient, file, remotePath, logId)
                     if (success) {
                         filesCopied++
                         bytesTransferred += bytes
@@ -113,11 +136,11 @@ class BackupEngine(
             val endTime = System.currentTimeMillis()
             db.backupLogDao().updateCompleted(logId, endTime, filesCopied, filesSkipped, filesFailed, bytesTransferred)
             db.backupLogDao().deleteOldLogs(settings.maxLogEntries)
-            AlarmScheduler.schedule(context, endTime + settings.scheduleIntervalMinutes * 60_000L)
+            // No manual rescheduling: WorkManager's PeriodicWorkRequest repeats itself.
             BackupResult.Success(filesCopied, filesSkipped, filesFailed, bytesTransferred)
         } catch (e: kotlinx.coroutines.CancellationException) {
             withContext(NonCancellable) {
-                db.backupLogDao().cancelStaleRunning(System.currentTimeMillis())
+                db.backupLogDao().updateCancelled(logId, System.currentTimeMillis())
                 db.backupLogDao().deleteOldLogs(settings.maxLogEntries)
             }
             throw e
@@ -130,7 +153,7 @@ class BackupEngine(
         }
     }
 
-    private suspend fun transferAndVerify(file: MediaFile, remotePath: String, logId: Long): Pair<Boolean, Long> {
+    private suspend fun transferAndVerify(smbClient: SmbClient, file: MediaFile, remotePath: String, logId: Long): Pair<Boolean, Long> {
         return try {
             val parentPath = remotePath.substringBeforeLast("\\", "")
             if (parentPath.isNotEmpty()) smbClient.ensureDirectory(parentPath)

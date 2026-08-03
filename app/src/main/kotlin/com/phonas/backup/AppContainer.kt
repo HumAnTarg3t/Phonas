@@ -9,17 +9,16 @@ import com.phonas.backup.backup.MediaStoreScanner
 import com.phonas.backup.data.db.AppDatabase
 import com.phonas.backup.data.prefs.CredentialStore
 import com.phonas.backup.data.prefs.SettingsStore
-import com.phonas.backup.data.smb.SmbClient
 
 class AppContainer(context: Context) {
     val appContext: Context = context.applicationContext
     val db = AppDatabase.create(context)
     val credentialStore = CredentialStore(context)
     val settingsStore = SettingsStore(context)
-    val smbClient = SmbClient()
     val fileVerifier = FileVerifier(context)
     val fileScanner = FileScanner(context)
     val mediaStoreScanner = MediaStoreScanner(context)
     val duplicateDetector = DuplicateDetector(db, fileVerifier)
-    val backupEngine = BackupEngine(context, db, smbClient, fileScanner, mediaStoreScanner, duplicateDetector, fileVerifier)
+    // BackupEngine constructs a fresh SmbClient per run via its default factory.
+    val backupEngine = BackupEngine(context, db, fileScanner, mediaStoreScanner, duplicateDetector, fileVerifier)
 }

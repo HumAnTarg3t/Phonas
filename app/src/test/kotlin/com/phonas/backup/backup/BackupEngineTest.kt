@@ -57,7 +57,10 @@ class BackupEngineTest {
         whenever(db.backupSessionFileDao()).thenReturn(sessionFileDao)
         runBlocking { whenever(logDao.insert(any())).thenReturn(1L) }
 
-        engine = BackupEngine(context, db, smbClient, fileScanner, mediaStoreScanner, duplicateDetector, fileVerifier)
+        engine = BackupEngine(
+            context, db, fileScanner, mediaStoreScanner, duplicateDetector, fileVerifier,
+            smbClientFactory = { smbClient }
+        )
     }
 
     @Test

@@ -47,10 +47,20 @@ interface BackupLogDao {
     )
     suspend fun updateFailed(id: Long, endTime: Long, error: String?)
 
+    /** Cancel a single specific run (used by the engine's own cancellation path). */
     @Query(
-        "UPDATE backup_logs SET status = 'CANCELLED', endTime = :now WHERE status = 'RUNNING'"
+        "UPDATE backup_logs SET status = 'CANCELLED', endTime = :now WHERE id = :id AND status = 'RUNNING'"
     )
-    suspend fun cancelStaleRunning(now: Long)
+    suspend fun updateCancelled(id: Long, now: Long)
+
+    /**
+     * Startup cleanup: only reap RUNNING logs older than [cutoff] so a freshly-inserted
+     * log from a worker that is starting concurrently is never flipped to CANCELLED.
+     */
+    @Query(
+        "UPDATE backup_logs SET status = 'CANCELLED', endTime = :now WHERE status = 'RUNNING' AND startTime < :cutoff"
+    )
+    suspend fun cancelStaleRunning(cutoff: Long, now: Long)
 
     @Query(
         "DELETE FROM backup_logs WHERE id NOT IN (SELECT id FROM backup_logs ORDER BY startTime DESC LIMIT :keep)"
