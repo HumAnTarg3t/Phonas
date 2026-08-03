@@ -41,10 +41,10 @@ class FileVerifierTest {
     }
 
     @Test
-    fun `verify returns VERIFIED on matching size for large file without hash`() {
-        val largeSize = 600L * 1024 * 1024  // 600 MB — above hash threshold
-        val file = mediaFile(size = largeSize)
-        whenever(smb.getRemoteFileInfo(any())).thenReturn(RemoteFileInfo(size = largeSize, lastModified = 0))
+    fun `verify returns VERIFIED on matching size for very large file above full-hash cap`() {
+        val hugeSize = 3L * 1024 * 1024 * 1024  // 3 GB — above VERIFY_FULL_HASH_MAX_BYTES
+        val file = mediaFile(size = hugeSize)
+        whenever(smb.getRemoteFileInfo(any())).thenReturn(RemoteFileInfo(size = hugeSize, lastModified = 0))
 
         val result = verifier.verify(file, "remote\\path\\file.mp4", "ignoredHash", smb)
 

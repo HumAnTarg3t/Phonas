@@ -3,20 +3,21 @@ package com.phonas.backup.backup
 import android.content.Context
 import com.phonas.backup.backup.model.MediaFile
 import com.phonas.backup.data.smb.SmbClient
+import java.io.IOException
 import java.security.MessageDigest
 
 enum class VerificationOutcome { VERIFIED, NOT_FOUND, MISMATCH }
 
 class FileVerifier(private val context: Context) {
 
-    private val hashThresholdBytes = 500L * 1024 * 1024  // 500 MB
-
     fun computeLocalHash(file: MediaFile): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        context.contentResolver.openInputStream(file.uri)?.use { input ->
+        val input = context.contentResolver.openInputStream(file.uri)
+            ?: throw IOException("Cannot open source file: ${file.uri}")
+        input.use {
             val buffer = ByteArray(8192)
             var n: Int
-            while (input.read(buffer).also { n = it } != -1) {
+            while (it.read(buffer).also { r -> n = r } != -1) {
                 digest.update(buffer, 0, n)
             }
         }
@@ -38,7 +39,10 @@ class FileVerifier(private val context: Context) {
     fun verify(file: MediaFile, remotePath: String, localHash: String, smb: SmbClient): VerificationOutcome {
         val remoteInfo = smb.getRemoteFileInfo(remotePath) ?: return VerificationOutcome.NOT_FOUND
         if (remoteInfo.size != file.size) return VerificationOutcome.MISMATCH
-        if (file.size <= hashThresholdBytes) {
+        // The full local hash is already computed for free during upload, so the only cost of a
+        // full verify is the remote read-back. Do it for everything up to VERIFY_FULL_HASH_MAX;
+        // above that, a size match is accepted (rare for phone media).
+        if (file.size <= BackupLimits.VERIFY_FULL_HASH_MAX_BYTES) {
             val remoteHash = computeRemoteHash(remotePath, smb)
             return if (localHash == remoteHash) VerificationOutcome.VERIFIED else VerificationOutcome.MISMATCH
         }

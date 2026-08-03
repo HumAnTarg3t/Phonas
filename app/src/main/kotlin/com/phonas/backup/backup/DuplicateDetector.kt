@@ -10,8 +10,6 @@ class DuplicateDetector(
     private val db: AppDatabase,
     private val fileVerifier: FileVerifier
 ) {
-    private val hashThresholdBytes = 500L * 1024 * 1024
-
     suspend fun shouldSkip(file: MediaFile, smbClient: SmbClient, remotePath: String): Boolean {
         var record = db.backupFileDao().findByUri(file.uri.toString())
 
@@ -33,15 +31,17 @@ class DuplicateDetector(
             return true
         }
 
-        // Check NAS directly — handles reinstall or DB loss
-        val remoteInfo = smbClient.getRemoteFileInfo(remotePath) ?: return false
+        // Check NAS directly — handles reinstall or DB loss. A transient error here (not a clean
+        // "absent") shouldn't fail the whole backup, so treat any failure as "not a duplicate"
+        // and let the transfer path re-upload (harmless overwrite).
+        val remoteInfo = runCatching { smbClient.getRemoteFileInfo(remotePath) }.getOrNull() ?: return false
 
         if (remoteInfo.size != file.size) return false
 
         val matched: Boolean
         val localHash: String?
 
-        if (file.size <= hashThresholdBytes) {
+        if (file.size <= BackupLimits.DEDUP_HASH_MAX_BYTES) {
             localHash = fileVerifier.computeLocalHash(file)
             val remoteHash = fileVerifier.computeRemoteHash(remotePath, smbClient)
             matched = (localHash == remoteHash)

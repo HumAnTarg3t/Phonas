@@ -162,6 +162,10 @@ class BackupEngine(
     }
 
     private suspend fun transferAndVerify(smbClient: SmbClient, file: MediaFile, remotePath: String, logId: Long): Pair<Boolean, Long> {
+        // Upload to a temp path, verify it, then atomically promote it over the final name. This
+        // keeps the last good backup intact if the transfer fails midway, and never leaves a
+        // truncated file under the real filename.
+        val tempPath = "$remotePath.part"
         return try {
             val parentPath = remotePath.substringBeforeLast("\\", "")
             if (parentPath.isNotEmpty()) smbClient.ensureDirectory(parentPath)
@@ -172,61 +176,67 @@ class BackupEngine(
 
             input.use { raw ->
                 DigestInputStream(raw, digest).use { digestStream ->
-                    smbClient.uploadFile(digestStream, remotePath, file.lastModified)
+                    smbClient.uploadFile(digestStream, tempPath, file.lastModified)
                 }
             }
 
             val localHash = digest.digest().toHexString()
-            val outcome = fileVerifier.verify(file, remotePath, localHash, smbClient)
-
-            when (outcome) {
-                VerificationOutcome.VERIFIED, VerificationOutcome.NOT_FOUND -> {
-                    // VERIFIED: hash confirmed. NOT_FOUND: NAS automation moved the file after
-                    // upload but before verification. SMBJ throws on write failure, so if
-                    // uploadFile() returned normally the data was accepted by the NAS.
-                    db.backupFileDao().markSuccess(
-                        uri = file.uri.toString(),
-                        nasPath = remotePath,
-                        sha256 = localHash,
-                        backedUpAt = System.currentTimeMillis()
-                    )
-                    // Ensure record exists (markSuccess only updates if row already present)
-                    if (db.backupFileDao().findByUri(file.uri.toString()) == null) {
-                        db.backupFileDao().upsert(
-                            BackupFileRecord(
-                                localUri = file.uri.toString(),
-                                relativePath = file.relativePath,
-                                filename = file.name,
-                                fileSize = file.size,
-                                lastModified = file.lastModified,
-                                localSha256 = localHash,
-                                nasPath = remotePath,
-                                backedUpAt = System.currentTimeMillis(),
-                                status = BackupStatus.SUCCESS,
-                                errorMessage = null
-                            )
-                        )
-                    }
-                    db.backupSessionFileDao().insert(
-                        BackupSessionFile(
-                            logId = logId, filename = file.name, nasPath = remotePath,
-                            actionStatus = SessionFileStatus.COPIED, fileSize = file.size,
-                            localUri = file.uri.toString()
-                        )
-                    )
+            when (fileVerifier.verify(file, tempPath, localHash, smbClient)) {
+                VerificationOutcome.VERIFIED -> {
+                    smbClient.rename(tempPath, remotePath, replaceIfExists = true)
+                    recordSuccess(file, remotePath, localHash, logId)
                     Pair(true, file.size)
                 }
                 VerificationOutcome.MISMATCH -> {
-                    runCatching { smbClient.deleteFile(remotePath) }
+                    runCatching { smbClient.deleteFile(tempPath) }
                     markFailed(file, remotePath, "Verification failed: hash mismatch", logId)
+                }
+                VerificationOutcome.NOT_FOUND -> {
+                    // The upload did not land (or was removed) — retry next run rather than
+                    // recording a file that isn't verifiably on the NAS.
+                    runCatching { smbClient.deleteFile(tempPath) }
+                    markFailed(file, remotePath, "Verification failed: file missing after upload", logId)
                 }
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            runCatching { smbClient.deleteFile(remotePath) }
+            runCatching { smbClient.deleteFile(tempPath) }
             markFailed(file, remotePath, sanitizeError(e.message), logId)
         }
+    }
+
+    private suspend fun recordSuccess(file: MediaFile, remotePath: String, localHash: String, logId: Long) {
+        db.backupFileDao().markSuccess(
+            uri = file.uri.toString(),
+            nasPath = remotePath,
+            sha256 = localHash,
+            backedUpAt = System.currentTimeMillis()
+        )
+        // markSuccess only updates an existing row; insert one if this is the first backup.
+        if (db.backupFileDao().findByUri(file.uri.toString()) == null) {
+            db.backupFileDao().upsert(
+                BackupFileRecord(
+                    localUri = file.uri.toString(),
+                    relativePath = file.relativePath,
+                    filename = file.name,
+                    fileSize = file.size,
+                    lastModified = file.lastModified,
+                    localSha256 = localHash,
+                    nasPath = remotePath,
+                    backedUpAt = System.currentTimeMillis(),
+                    status = BackupStatus.SUCCESS,
+                    errorMessage = null
+                )
+            )
+        }
+        db.backupSessionFileDao().insert(
+            BackupSessionFile(
+                logId = logId, filename = file.name, nasPath = remotePath,
+                actionStatus = SessionFileStatus.COPIED, fileSize = file.size,
+                localUri = file.uri.toString()
+            )
+        )
     }
 
     private suspend fun markFailed(file: MediaFile, remotePath: String, error: String, logId: Long): Pair<Boolean, Long> {
@@ -266,7 +276,30 @@ class BackupEngine(
             parts.addAll(file.relativePath.split("/").filter { it.isNotEmpty() })
         }
         parts.add(file.name)
-        return parts.joinToString("\\")
+        // ensureDirectory() derives directory segments from this same string, so sanitizing here
+        // keeps file and directory paths consistent.
+        return parts.joinToString("\\") { sanitizePathComponent(it) }
+    }
+
+    /** Make one path segment safe for SMB/NTFS: strip illegal chars, trailing dots/spaces,
+     *  reserved device names, and cap length while preserving the extension. */
+    private fun sanitizePathComponent(raw: String): String {
+        val cleaned = buildString {
+            for (c in raw) append(if (c.code < 0x20 || c in ILLEGAL_PATH_CHARS) '_' else c)
+        }.trimEnd(' ', '.')
+
+        val safe = cleaned.ifEmpty { "_" }
+        val base = safe.substringBeforeLast('.', safe)
+        if (base.uppercase() in RESERVED_NAMES) return "_$safe"
+
+        if (safe.length <= MAX_COMPONENT_LEN) return safe
+        // Too long: truncate the base but keep the extension.
+        val ext = safe.substringAfterLast('.', "")
+        return if (ext.isNotEmpty() && ext.length < MAX_COMPONENT_LEN - 1) {
+            safe.substring(0, MAX_COMPONENT_LEN - ext.length - 1) + "." + ext
+        } else {
+            safe.substring(0, MAX_COMPONENT_LEN)
+        }
     }
 
     private fun sanitizeError(message: String?): String {
@@ -279,4 +312,14 @@ class BackupEngine(
     }
 
     private fun ByteArray.toHexString(): String = joinToString("") { "%02x".format(it) }
+
+    companion object {
+        private val ILLEGAL_PATH_CHARS = charArrayOf('\\', '/', ':', '*', '?', '"', '<', '>', '|').toSet()
+        private val RESERVED_NAMES = setOf(
+            "CON", "PRN", "AUX", "NUL",
+            "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+            "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"
+        )
+        private const val MAX_COMPONENT_LEN = 255
+    }
 }
