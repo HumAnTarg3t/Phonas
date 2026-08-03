@@ -37,7 +37,8 @@ class MediaChangeObserver(
     }
 
     override fun onChange(selfChange: Boolean, uri: Uri?) {
-        if (!credentialStore.isConfigured()) return
+        // onChange runs on the main looper, so do all the disk/Keystore work (isConfigured reads
+        // EncryptedSharedPreferences) inside the debounced coroutine, which runs off the main thread.
         debounceJob?.cancel()
         debounceJob = scope.launch {
             delay(DEBOUNCE_MS)
