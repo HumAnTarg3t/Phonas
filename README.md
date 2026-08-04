@@ -32,6 +32,7 @@ An Android app that automatically backs up photos and videos from your phone to 
 
 - Android 10+ (API 29). Full "Scan all device media" coverage (All Files Access) requires Android 11+ (API 30); on Android 10 scan-all falls back to MediaStore only.
 - Android Studio Ladybug or newer to build
+- JDK 17+ for command-line builds (Android Studio's bundled JBR works; a JRE will not)
 - A NAS with SMB2/SMB3 sharing enabled
 - Wi-Fi network that can reach the NAS
 
@@ -48,6 +49,10 @@ An Android app that automatically backs up photos and videos from your phone to 
 
 In Android Studio: **Build → Build Bundle(s) / APK(s) → Build APK(s)**
 
+From the command line: `./gradlew assembleDebug` (`gradlew.bat` on Windows). The wrapper pins Gradle
+8.13, the version required by AGP 8.12. If `JAVA_HOME` points at an old or JRE-only install, set it
+to a JDK 17+ first — on Windows, Android Studio's is at `C:\Program Files\Android\Android Studio\jbr`.
+
 Output: `app/build/outputs/apk/debug/app-debug.apk`
 
 ### Install (USB debugging)
@@ -59,6 +64,15 @@ For sideloading without USB debugging, see [SIDELOAD.md](SIDELOAD.md).
 ### Run unit tests
 
 In Android Studio: **Run → Run All Tests**, or right-click the `test` source set and select **Run Tests**.
+
+From the command line: `./gradlew :app:testDebugUnitTest`, or a single class with
+`--tests "com.phonas.backup.backup.FileVerifierTest"`. Results land in
+`app/build/reports/tests/testDebugUnitTest/index.html`.
+
+Tests that construct an `android.net.Uri` must run under Robolectric
+(`@RunWith(RobolectricTestRunner::class)` plus `@Config(sdk = [34], application = android.app.Application::class)`).
+Against the stubbed `android.jar` of a plain JVM test, statics like `Uri.EMPTY` are null and Kotlin's
+non-null checks reject them.
 
 ---
 

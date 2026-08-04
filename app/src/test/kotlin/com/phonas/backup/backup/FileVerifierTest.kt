@@ -8,12 +8,19 @@ import com.phonas.backup.data.smb.SmbClient
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.ByteArrayInputStream
 import java.security.MessageDigest
 
+// Robolectric supplies a real android.net.Uri; against the stubbed android.jar of a plain JVM
+// test the static Uri.EMPTY field is null and MediaFile's non-null uri rejects it.
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = android.app.Application::class)
 class FileVerifierTest {
 
     private lateinit var context: Context
