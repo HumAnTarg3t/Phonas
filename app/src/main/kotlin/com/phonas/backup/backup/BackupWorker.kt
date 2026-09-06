@@ -33,13 +33,13 @@ class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             return Result.failure()
         }
 
+        // Wi-Fi / NAS-reachability gates: return retry() and let WorkManager's exponential
+        // backoff re-run this worker. (WorkManager is the sole scheduler now.)
         if (!isOnWifi()) {
-            AlarmScheduler.schedule(applicationContext, System.currentTimeMillis() + RETRY_INTERVAL_MS)
             return Result.retry()
         }
 
         if (!isNasReachable(credentials.nasHost)) {
-            AlarmScheduler.schedule(applicationContext, System.currentTimeMillis() + RETRY_INTERVAL_MS)
             return Result.retry()
         }
 
@@ -50,7 +50,7 @@ class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             password = credentials.password
         )
 
-        container.backupEngine.progressCallback = { progress ->
+        val progressCallback: suspend (com.phonas.backup.backup.model.BackupProgress) -> Unit = { progress ->
             setProgress(
                 workDataOf(
                     KEY_CURRENT_FILE to progress.currentFile,
@@ -62,12 +62,10 @@ class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             )
         }
 
-        return when (container.backupEngine.runBackup(settings, nasCredentials)) {
+        return when (container.backupEngine.runBackup(settings, nasCredentials, progressCallback)) {
             is BackupResult.Success -> Result.success()
-            is BackupResult.Failure -> {
-                AlarmScheduler.schedule(applicationContext, System.currentTimeMillis() + RETRY_INTERVAL_MS)
-                Result.retry()
-            }
+            is BackupResult.AlreadyRunning -> Result.success()
+            is BackupResult.Failure -> Result.retry()
         }
     }
 
@@ -122,8 +120,6 @@ class BackupWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     companion object {
         const val CHANNEL_ID = "backup_progress"
         const val NOTIFICATION_ID = 1001
-
-        private const val RETRY_INTERVAL_MS = 5 * 60 * 1000L
 
         const val KEY_CURRENT_FILE = "current_file"
         const val KEY_FILES_DONE = "files_done"

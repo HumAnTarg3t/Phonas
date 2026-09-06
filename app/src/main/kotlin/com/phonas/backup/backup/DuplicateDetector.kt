@@ -10,17 +10,19 @@ class DuplicateDetector(
     private val db: AppDatabase,
     private val fileVerifier: FileVerifier
 ) {
-    private val hashThresholdBytes = 500L * 1024 * 1024
-
     suspend fun shouldSkip(file: MediaFile, smbClient: SmbClient, remotePath: String): Boolean {
-        var record = db.backupFileDao().findByUri(file.uri.toString())
+        val currentUri = file.uri.toString()
+        var record = db.backupFileDao().findByUri(currentUri)
 
-        // MediaStore IDs can change on reindex; fall back to stable path+name lookup
+        // MediaStore IDs change on reindex and the same file has different URIs across sources
+        // (content:// vs file://), so fall back to the stable path+name identity.
         if (record == null) {
-            record = db.backupFileDao().findByRelativePathAndName(file.relativePath, file.name)
-            if (record != null) {
-                // Self-heal: store the new URI for future fast-path hits
-                db.backupFileDao().upsert(record.copy(localUri = file.uri.toString()))
+            val healed = db.backupFileDao().findByRelativePathAndName(file.relativePath, file.name)
+            if (healed != null) {
+                // Self-heal in place (no orphan row) and reflect the new key in memory so the
+                // upsert below updates this same row rather than resurrecting the old URI.
+                db.backupFileDao().updateLocalUri(healed.localUri, currentUri)
+                record = healed.copy(localUri = currentUri)
             }
         }
 
@@ -33,15 +35,17 @@ class DuplicateDetector(
             return true
         }
 
-        // Check NAS directly — handles reinstall or DB loss
-        val remoteInfo = smbClient.getRemoteFileInfo(remotePath) ?: return false
+        // Check NAS directly — handles reinstall or DB loss. A transient error here (not a clean
+        // "absent") shouldn't fail the whole backup, so treat any failure as "not a duplicate"
+        // and let the transfer path re-upload (harmless overwrite).
+        val remoteInfo = runCatching { smbClient.getRemoteFileInfo(remotePath) }.getOrNull() ?: return false
 
         if (remoteInfo.size != file.size) return false
 
         val matched: Boolean
         val localHash: String?
 
-        if (file.size <= hashThresholdBytes) {
+        if (file.size <= BackupLimits.DEDUP_HASH_MAX_BYTES) {
             localHash = fileVerifier.computeLocalHash(file)
             val remoteHash = fileVerifier.computeRemoteHash(remotePath, smbClient)
             matched = (localHash == remoteHash)

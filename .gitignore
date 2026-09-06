@@ -9,3 +9,10 @@ app/build
 .externalNativeBuild
 .cxx
 local.properties
+deep-audit-the-code-splendid-unicorn.md
+
+# Kotlin Gradle plugin build state; .kotlin/errors logs embed absolute local paths
+.kotlin/
+
+# Config exported by the app's Setup screen: NAS host, share and username (password is blanked)
+phonas_config*.json

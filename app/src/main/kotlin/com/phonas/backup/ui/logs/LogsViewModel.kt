@@ -18,18 +18,24 @@ import kotlinx.coroutines.launch
 
 class LogsViewModel(private val container: AppContainer) : ViewModel() {
 
-    val filterStatus = MutableStateFlow<LogStatus?>(null)
+    private val _filterStatus = MutableStateFlow<LogStatus?>(null)
+    val filterStatus: StateFlow<LogStatus?> = _filterStatus.asStateFlow()
 
     val allLogs: StateFlow<List<BackupLogEntry>> = container.db.backupLogDao()
         .getAllLogs()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    // Derive from allLogs so the underlying getAllLogs() flow is only collected once.
     val filteredLogs: StateFlow<List<BackupLogEntry>> = combine(
-        container.db.backupLogDao().getAllLogs(),
-        filterStatus
+        allLogs,
+        _filterStatus
     ) { logs, filter ->
         if (filter == null) logs else logs.filter { it.status == filter }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun setFilter(status: LogStatus?) {
+        _filterStatus.value = status
+    }
 
     private val _selectedLogFiles = MutableStateFlow<List<BackupSessionFile>>(emptyList())
     val selectedLogFiles: StateFlow<List<BackupSessionFile>> = _selectedLogFiles.asStateFlow()

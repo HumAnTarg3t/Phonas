@@ -8,7 +8,9 @@ enum class BackupStatus { PENDING, SUCCESS, FAILED }
 
 @Entity(
     tableName = "backup_files",
-    indices = [Index("nasPath")]
+    // Composite index for the stable-identity fallback lookup (findByRelativePathAndName),
+    // hit once per file in scan-all mode — without it that was a full table scan.
+    indices = [Index("nasPath"), Index(value = ["relativePath", "filename"])]
 )
 data class BackupFileRecord(
     @PrimaryKey val localUri: String,

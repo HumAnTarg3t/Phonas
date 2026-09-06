@@ -13,6 +13,13 @@ import androidx.work.WorkManager
 import com.phonas.backup.data.prefs.AppSettings
 import java.util.concurrent.TimeUnit
 
+/**
+ * WorkManager is the single source of truth for scheduling. The periodic request
+ * reschedules itself and survives reboots, so no AlarmManager is needed. Keeping two
+ * independent schedulers (as a previous version did) is exactly what caused backups to
+ * run twice per cycle.
+ */
+
 object WorkScheduler {
 
     const val WORK_NAME_PERIODIC = "nas_backup_periodic"
@@ -31,12 +38,13 @@ object WorkScheduler {
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.MINUTES)
             .build()
 
+        // UPDATE (not CANCEL_AND_REENQUEUE) so pressing Save applies a changed interval without
+        // restarting the running cadence — re-enqueuing on every Save would spawn an extra run.
         WorkManager.getInstance(context).enqueueUniquePeriodicWork(
             WORK_NAME_PERIODIC,
-            ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE,
+            ExistingPeriodicWorkPolicy.UPDATE,
             request
         )
-        AlarmScheduler.schedule(context, System.currentTimeMillis() + intervalMinutes * 60_000L)
     }
 
     fun runNow(context: Context, settings: AppSettings) {

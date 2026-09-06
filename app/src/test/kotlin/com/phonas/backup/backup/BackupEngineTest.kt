@@ -17,11 +17,18 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+// Robolectric provides a real android.net.Uri so Uri.parse / uri.toString() work; a plain
+// Application avoids BackupApplication's startup side effects.
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = android.app.Application::class)
 class BackupEngineTest {
 
     private lateinit var context: Context
@@ -32,6 +39,7 @@ class BackupEngineTest {
     private lateinit var smbClient: SmbClient
     private lateinit var fileScanner: FileScanner
     private lateinit var mediaStoreScanner: MediaStoreScanner
+    private lateinit var allFilesScanner: AllFilesScanner
     private lateinit var duplicateDetector: DuplicateDetector
     private lateinit var fileVerifier: FileVerifier
     private lateinit var engine: BackupEngine
@@ -49,6 +57,7 @@ class BackupEngineTest {
         smbClient = mock()
         fileScanner = mock()
         mediaStoreScanner = mock()
+        allFilesScanner = mock()
         duplicateDetector = mock()
         fileVerifier = mock()
 
@@ -57,7 +66,10 @@ class BackupEngineTest {
         whenever(db.backupSessionFileDao()).thenReturn(sessionFileDao)
         runBlocking { whenever(logDao.insert(any())).thenReturn(1L) }
 
-        engine = BackupEngine(context, db, smbClient, fileScanner, mediaStoreScanner, duplicateDetector, fileVerifier)
+        engine = BackupEngine(
+            context, db, fileScanner, mediaStoreScanner, allFilesScanner, duplicateDetector, fileVerifier,
+            smbClientFactory = { smbClient }
+        )
     }
 
     @Test

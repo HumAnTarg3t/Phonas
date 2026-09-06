@@ -2,20 +2,43 @@ package com.phonas.backup.data.prefs
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import java.security.KeyStore
 
 class CredentialStore(context: Context) {
 
-    private val prefs: SharedPreferences
+    private val appContext = context.applicationContext
 
-    init {
-        val masterKey = MasterKey.Builder(context)
+    // Built lazily so the disk + Keystore work happens off the app's UI startup path (first
+    // access is from a worker or a ViewModel's IO scope), not eagerly in Application.onCreate.
+    private val prefs: SharedPreferences by lazy { buildPrefs() }
+
+    private fun buildPrefs(): SharedPreferences {
+        return try {
+            createEncryptedPrefs()
+        } catch (e: Exception) {
+            // A corrupted keyset/master key would otherwise crash the app on every launch. Wipe
+            // the encrypted store (and master key) and recreate — the user re-enters credentials,
+            // which beats a permanent crash loop.
+            Log.w(TAG, "EncryptedSharedPreferences unusable; resetting credential store", e)
+            runCatching { appContext.deleteSharedPreferences(PREFS_NAME) }
+            runCatching {
+                val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+                ks.deleteEntry(MasterKey.DEFAULT_MASTER_KEY_ALIAS)
+            }
+            createEncryptedPrefs()
+        }
+    }
+
+    private fun createEncryptedPrefs(): SharedPreferences {
+        val masterKey = MasterKey.Builder(appContext)
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
-        prefs = EncryptedSharedPreferences.create(
-            context,
-            "nas_credentials",
+        return EncryptedSharedPreferences.create(
+            appContext,
+            PREFS_NAME,
             masterKey,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
@@ -44,14 +67,22 @@ class CredentialStore(context: Context) {
 
     fun save(host: String, share: String, user: String, pass: String) {
         prefs.edit()
-            .putString(KEY_HOST, host)
-            .putString(KEY_SHARE, share)
-            .putString(KEY_USERNAME, user)
-            .putString(KEY_PASSWORD, pass)
+            .putString(KEY_HOST, normalizeHost(host))
+            .putString(KEY_SHARE, normalizeShare(share))
+            .putString(KEY_USERNAME, user.trim())
+            .putString(KEY_PASSWORD, pass)  // never trim the password
             .apply()
     }
 
+    private fun normalizeHost(raw: String): String =
+        raw.trim().removePrefix("smb://").trimStart('\\', '/').trimEnd('\\', '/')
+
+    private fun normalizeShare(raw: String): String =
+        raw.trim().trim('\\', '/')
+
     companion object {
+        private const val TAG = "CredentialStore"
+        private const val PREFS_NAME = "nas_credentials"
         private const val KEY_HOST = "nas_host"
         private const val KEY_SHARE = "nas_share"
         private const val KEY_USERNAME = "username"

@@ -59,10 +59,20 @@ private val MIGRATION_2_3 = object : Migration(2, 3) {
     }
 }
 
+private val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Composite index name must match what Room generates for @Index(["relativePath","filename"]).
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_backup_files_relativePath_filename` " +
+                "ON `backup_files` (`relativePath`, `filename`)"
+        )
+    }
+}
+
 @Database(
     entities = [BackupFileRecord::class, BackupLogEntry::class, BackupSessionFile::class],
-    version = 3,
-    exportSchema = false
+    version = 4,
+    exportSchema = true
 )
 @TypeConverters(AppTypeConverters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -78,7 +88,10 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "backup.db"
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                // Backup state is reconstructable (re-scan re-populates it), so a downgrade can
+                // safely rebuild rather than crash.
+                .fallbackToDestructiveMigrationOnDowngrade()
                 .build()
         }
     }

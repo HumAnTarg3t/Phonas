@@ -8,12 +8,19 @@ import com.phonas.backup.data.smb.SmbClient
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.io.ByteArrayInputStream
 import java.security.MessageDigest
 
+// Robolectric supplies a real android.net.Uri; against the stubbed android.jar of a plain JVM
+// test the static Uri.EMPTY field is null and MediaFile's non-null uri rejects it.
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = android.app.Application::class)
 class FileVerifierTest {
 
     private lateinit var context: Context
@@ -41,10 +48,10 @@ class FileVerifierTest {
     }
 
     @Test
-    fun `verify returns VERIFIED on matching size for large file without hash`() {
-        val largeSize = 600L * 1024 * 1024  // 600 MB — above hash threshold
-        val file = mediaFile(size = largeSize)
-        whenever(smb.getRemoteFileInfo(any())).thenReturn(RemoteFileInfo(size = largeSize, lastModified = 0))
+    fun `verify returns VERIFIED on matching size for very large file above full-hash cap`() {
+        val hugeSize = 3L * 1024 * 1024 * 1024  // 3 GB — above VERIFY_FULL_HASH_MAX_BYTES
+        val file = mediaFile(size = hugeSize)
+        whenever(smb.getRemoteFileInfo(any())).thenReturn(RemoteFileInfo(size = hugeSize, lastModified = 0))
 
         val result = verifier.verify(file, "remote\\path\\file.mp4", "ignoredHash", smb)
 

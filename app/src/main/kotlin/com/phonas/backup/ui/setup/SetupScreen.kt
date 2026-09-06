@@ -1,9 +1,12 @@
 package com.phonas.backup.ui.setup
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
@@ -38,20 +41,26 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -60,9 +69,12 @@ import androidx.documentfile.provider.DocumentFile
 import com.phonas.backup.R
 import com.phonas.backup.ui.formatNextBackupLabel
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,6 +113,16 @@ fun SetupScreen(viewModel: SetupViewModel) {
         else viewModel.onMediaPermissionDenied()
     }
 
+    // All Files Access is granted in system Settings, so re-check on every resume.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshAllFilesAccess()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) viewModel.clearSaved()
     }
@@ -114,7 +136,15 @@ fun SetupScreen(viewModel: SetupViewModel) {
 
     if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = state.sinceDateMillis
+            initialSelectedDateMillis = state.sinceDateMillis,
+            // A future "skip older than" date would suppress every backup — disallow it.
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean =
+                    utcTimeMillis <= System.currentTimeMillis()
+
+                override fun isSelectableYear(year: Int): Boolean =
+                    year <= Calendar.getInstance().get(Calendar.YEAR)
+            }
         )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
@@ -218,6 +248,11 @@ fun SetupScreen(viewModel: SetupViewModel) {
                         viewModel.setScanAllMedia(false)
                         return@Switch
                     }
+                    // All Files Access already gives complete coverage — enable directly.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
+                        viewModel.setScanAllMedia(true)
+                        return@Switch
+                    }
                     val perms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO)
                     } else {
@@ -232,6 +267,44 @@ fun SetupScreen(viewModel: SetupViewModel) {
             )
         }
 
+        // Full coverage (WhatsApp group media and other .nomedia-hidden files) needs All Files
+        // Access. Prompt for it while scan-all is on and the grant is missing (Android 11+).
+        if (state.scanAllMedia
+            && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+            && !state.allFilesAccessGranted
+        ) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Grant All Files Access for full coverage", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Without it, media hidden from the gallery — such as WhatsApp group-chat " +
+                            "images when \"Media visibility\" is off — will not be backed up.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            val intent = runCatching {
+                                Intent(
+                                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                    Uri.parse("package:${context.packageName}")
+                                )
+                            }.getOrElse { Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION) }
+                            runCatching { context.startActivity(intent) }
+                                .onFailure {
+                                    runCatching {
+                                        context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+                                    }
+                                }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Grant All Files Access")
+                    }
+                }
+            }
+        }
+
         if (!state.scanAllMedia) {
             if (state.monitoredFolders.isEmpty()) {
                 Text(
@@ -241,8 +314,13 @@ fun SetupScreen(viewModel: SetupViewModel) {
                 )
             } else {
                 state.monitoredFolders.forEach { entry ->
-                    val uri = Uri.parse(entry.uri)
-                    val displayName = DocumentFile.fromTreeUri(context, uri)?.name ?: entry.uri
+                    // Resolving the tree URI's display name is a ContentResolver IPC — do it once
+                    // per URI off the main thread instead of on every recomposition.
+                    val displayName by produceState(initialValue = entry.uri, entry.uri) {
+                        value = withContext(Dispatchers.IO) {
+                            DocumentFile.fromTreeUri(context, Uri.parse(entry.uri))?.name ?: entry.uri
+                        }
+                    }
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -422,7 +500,10 @@ fun SetupScreen(viewModel: SetupViewModel) {
                 viewModel.save(context, host, share, username, password, scheduleMinutes, requireCharging, maxLogEntries)
             },
             modifier = Modifier.fillMaxWidth(),
+            // Require a password unless one is already stored — otherwise Save would schedule a
+            // backup that can never authenticate.
             enabled = host.isNotBlank() && share.isNotBlank() && username.isNotBlank()
+                && (password.isNotBlank() || state.hasExistingPassword)
         ) {
             Text(stringResource(R.string.btn_save))
         }

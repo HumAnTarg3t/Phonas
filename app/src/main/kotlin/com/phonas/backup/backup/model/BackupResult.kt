@@ -9,4 +9,7 @@ sealed class BackupResult {
     ) : BackupResult()
 
     data class Failure(val message: String?) : BackupResult()
+
+    /** Another backup was already running; this trigger was skipped without side effects. */
+    data object AlreadyRunning : BackupResult()
 }

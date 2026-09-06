@@ -55,6 +55,9 @@ class SettingsStore(private val context: Context) {
             prefs[Keys.SINCE_DATE] = settings.sinceDateMillis ?: 0L
             prefs[Keys.MAX_LOG_ENTRIES] = settings.maxLogEntries
             prefs[Keys.SCAN_ALL_MEDIA] = settings.scanAllMedia
+            // Drop migrated legacy keys so they can't shadow current values later.
+            prefs.remove(Keys.SCHEDULE_HOURS)
+            prefs.remove(Keys.FOLDER_URIS)
         }
     }
 

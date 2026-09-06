@@ -7,14 +7,8 @@ import com.phonas.backup.backup.model.MediaFile
 
 class FileScanner(private val context: Context) {
 
-    private val supportedExtensions = setOf(
-        "jpg", "jpeg", "heic", "heif", "png", "webp", "dng", "raw",
-        "mp4", "mov", "avi", "mkv", "3gp", "3gpp"
-    )
-
-    private val ignoredFolderNames = setOf(
-        "android", "obb", "data", ".thumbnails", "cache", ".cache", ".trash"
-    )
+    // Junk/derivative dirs to skip regardless of location.
+    private val junkFolderNames = setOf(".thumbnails", ".trashed", ".trash", ".statuses")
 
     fun scan(folderUri: Uri): List<MediaFile> {
         val root = DocumentFile.fromTreeUri(context, folderUri) ?: return emptyList()
@@ -28,12 +22,18 @@ class FileScanner(private val context: Context) {
             val name = child.name ?: continue
 
             if (child.isDirectory) {
-                if (name.startsWith('.') || name.lowercase() in ignoredFolderNames) continue
                 val childPath = if (relativePath.isEmpty()) name else "$relativePath/$name"
+                // Skip only sandboxed and junk subtrees; keep descending into Android/media so
+                // app-received media (e.g. WhatsApp) is reachable when a high-level tree is granted.
+                if (name.lowercase() in junkFolderNames) continue
+                if (childPath.equals("Android/data", ignoreCase = true) ||
+                    childPath.equals("Android/obb", ignoreCase = true)
+                ) continue
                 results.addAll(scanRecursive(child, childPath))
             } else if (child.isFile) {
-                val ext = name.substringAfterLast('.', "").lowercase()
-                if (ext in supportedExtensions) {
+                // Cheap extension check first; only fall back to the (per-file IPC) MIME lookup
+                // for files whose extension isn't recognised.
+                if (MediaTypes.isSupported(name) || MediaTypes.isMediaMime(child.type)) {
                     results.add(
                         MediaFile(
                             uri = child.uri,
