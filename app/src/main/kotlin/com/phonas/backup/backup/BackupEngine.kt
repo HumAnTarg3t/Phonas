@@ -101,12 +101,14 @@ class BackupEngine(
                 for (f in mediaStoreScanner.scanAll()) merged.putIfAbsent(f.identityKey, f)
                 for (f in allFilesScanner.scan()) merged.putIfAbsent(f.identityKey, f)
                 merged.values
+                    .filter { !MediaExclusions.isExcluded(it.relativePath) }
                     .filter { since == null || it.effectiveDate >= since }
                     .forEach { allFiles.add(IndexedFile(it, "")) }
             } else {
                 for (entry in settings.monitoredFolders) {
                     val folderUri = Uri.parse(entry.uri)
                     fileScanner.scan(folderUri)
+                        .filter { !MediaExclusions.isExcluded(it.relativePath) }
                         .filter { since == null || it.effectiveDate >= since }
                         .forEach { allFiles.add(IndexedFile(it, entry.prefix)) }
                 }

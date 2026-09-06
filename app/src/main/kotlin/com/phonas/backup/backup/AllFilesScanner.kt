@@ -76,9 +76,13 @@ class AllFilesScanner(private val context: Context) {
     private fun shouldSkipDir(root: File, dir: File): Boolean {
         val name = dir.name.lowercase()
         if (name in JUNK_DIR_NAMES) return true
+        val rel = relativePathOf(root, dir)
+        // Pure optimisation — correctness comes from the filter in BackupEngine. Pruning here
+        // avoids listing a Sent folder that can hold thousands of entries.
+        if (MediaExclusions.isExcluded(rel)) return true
         // Android/data and Android/obb are sandboxed and unreadable; never descend.
-        val rel = relativePathOf(root, dir).lowercase()
-        return rel == "android/data" || rel == "android/obb"
+        return rel.equals("android/data", ignoreCase = true) ||
+            rel.equals("android/obb", ignoreCase = true)
     }
 
     /** Path of [dir] relative to the volume [root], with '/' separators, matching MediaStore RELATIVE_PATH. */

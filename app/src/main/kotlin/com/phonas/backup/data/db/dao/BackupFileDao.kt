@@ -21,6 +21,44 @@ interface BackupFileDao {
     @Query("SELECT * FROM backup_files WHERE status = 'FAILED'")
     suspend fun findAllFailed(): List<BackupFileRecord>
 
+    /**
+     * Free first stage of the content-duplicate gate: has any already-backed-up file exactly this
+     * size and a known content hash? Answered from the (fileSize, localSha256) index, so a file
+     * with no same-size twin costs one seek and is never read from disk.
+     *
+     * status = 'SUCCESS' is load-bearing: markFailed does not clear localSha256, so a FAILED row
+     * can still carry a hash whose nasPath may hold nothing.
+     */
+    @Query(
+        """
+        SELECT EXISTS(
+            SELECT 1 FROM backup_files
+            WHERE fileSize = :size AND localSha256 IS NOT NULL
+              AND status = 'SUCCESS' AND localUri != :excludeUri
+        )
+        """
+    )
+    suspend fun hasHashedFileOfSize(size: Long, excludeUri: String): Boolean
+
+    /**
+     * The already-backed-up file with identical bytes — same size AND same SHA-256 — under any
+     * path. [excludeUri] stops a file matching its own record. Oldest wins: the longest-established
+     * NAS copy is the one most likely to still be there.
+     */
+    @Query(
+        """
+        SELECT * FROM backup_files
+        WHERE localSha256 = :sha256 AND fileSize = :size
+          AND status = 'SUCCESS' AND localUri != :excludeUri
+        ORDER BY backedUpAt ASC LIMIT 1
+        """
+    )
+    suspend fun findContentDuplicate(
+        sha256: String,
+        size: Long,
+        excludeUri: String
+    ): BackupFileRecord?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(record: BackupFileRecord)
 

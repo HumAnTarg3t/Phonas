@@ -69,9 +69,23 @@ private val MIGRATION_3_4 = object : Migration(3, 4) {
     }
 }
 
+private val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        // Index name must match what Room generates for @Index(["fileSize","localSha256"]).
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS `index_backup_files_fileSize_localSha256` " +
+                "ON `backup_files` (`fileSize`, `localSha256`)"
+        )
+    }
+}
+
+// One place to update, and reachable from androidTest so MigrationTest can validate each step
+// against the exported schemas rather than discovering a bad index name on a user's device.
+internal val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+
 @Database(
     entities = [BackupFileRecord::class, BackupLogEntry::class, BackupSessionFile::class],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 @TypeConverters(AppTypeConverters::class)
@@ -88,7 +102,7 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "backup.db"
             )
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(*ALL_MIGRATIONS)
                 // Backup state is reconstructable (re-scan re-populates it), so a downgrade can
                 // safely rebuild rather than crash.
                 .fallbackToDestructiveMigrationOnDowngrade()
