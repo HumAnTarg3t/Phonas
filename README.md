@@ -9,7 +9,7 @@ An Android app that automatically backs up photos and videos from your phone to 
 - Backs up photos and videos to any SMB2/SMB3 NAS share
 - Runs automatically in the background via a single WorkManager periodic job — exactly once per interval, including while the screen is locked; retries on WorkManager's exponential backoff when the NAS is unreachable
 - Only operates on unmetered (Wi-Fi) networks
-- Incremental backups — skips files already on the NAS
+- Incremental backups — skips files already on the NAS, including the same photo under a different folder (matched by content, not path)
 - Atomic uploads: each file is written to a temporary name, verified, then renamed into place, so a mid-transfer failure never overwrites the previous good copy
 - SHA-256 verification of every transferred file (full-hash up to 2 GB; size-only above)
 - Preserves folder structure, original filenames, and original file modification dates on the NAS
@@ -90,7 +90,7 @@ MediaStoreScanner     Queries MediaStore across all volumes (fast path for index
 AllFilesScanner       Filesystem walk (All Files Access) that finds .nomedia-hidden media MediaStore skips
 MediaChangeObserver   Debounced trigger: enqueues a backup shortly after new media is indexed
 FileVerifier          SHA-256 streaming hash for local and remote files
-DuplicateDetector     DB-first check (stable relativePath+name identity), NAS fallback
+DuplicateDetector     DB fast path, then content match by SHA-256 across paths, then NAS probe
     ↓
 Room DB               Tracks backed-up files, session logs, and per-file session detail (capped by maxLogEntries)
 DataStore             Non-sensitive settings (schedule, charging, date filter, log retention, scan mode)
@@ -199,8 +199,17 @@ Example: selecting the `DCIM/Camera` folder with prefix `camera` writes files to
 Before transferring any file:
 
 1. **DB check** — if the file was previously backed up with the same size and modification time, skip it immediately.
-2. **NAS check** — if not in the DB (e.g. after reinstall), check whether the file exists on the NAS with the same size. For files ≤500 MB, also compare SHA-256 hashes.
-3. Transfer only if the file is genuinely new or changed.
+2. **Content check** — if these exact bytes are already on the NAS under *another* path, skip. Two stages, so this is free in the common case: a same-size candidate must already exist in the database before the file is ever read from disk, and only then is its SHA-256 computed and matched. This is what stops the same photo being backed up three times because it sits in DCIM, in a WhatsApp folder, and in a second album. The skip records the twin's NAS path, so several database rows can point at one file on the NAS.
+3. **NAS check** — if not in the DB (e.g. after reinstall), check whether the file exists on the NAS at *its own* destination path with the same size. For files ≤500 MB, also compare SHA-256 hashes.
+4. Transfer only if the file is genuinely new or changed.
+
+Content matching is capped at 500 MB and has **no size-only fallback**, unlike step 3: a bare size match against a file at an unrelated path is no evidence at all, so above the cap the file is uploaded. A large video duplicated across two folders is therefore still transferred twice.
+
+### Excluded folders
+
+WhatsApp *recompresses* a photo when you send it, so the copy under `WhatsApp Images/Sent` is byte-different from the DCIM original — same picture, different hash. Content matching cannot catch it, so those folders are skipped by path instead: any `Sent` folder whose parent starts with `WhatsApp ` (Images, Video, Documents, Audio, Animated Gifs), in every install layout including WhatsApp Business.
+
+Received media is deliberately still backed up — for a photo someone sent you, the WhatsApp copy is usually the only one you have. The rule is not user-configurable, matching the existing junk-folder skips. It only stops *future* uploads; anything already on the NAS stays there.
 
 ---
 
